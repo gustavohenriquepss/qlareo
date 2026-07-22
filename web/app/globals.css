@@ -1,0 +1,168 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens — "Analytics Dashboard" (data-dense, clarity > aesthetics).
+   Light only, by decision.
+
+   The chart series colors are NOT free choices: the categorical pair was
+   validated for colorblind separation, lightness band, chroma and contrast
+   (worst adjacent pair ΔE 32.3 protan / 29.3 tritan against the card surface).
+   Re-validate if you change them.
+
+   That ΔE pass covered SEPARATION between series, not contrast against the
+   background — a separate check. Every token below was audited for WCAG ratio
+   against the three surfaces (#ffffff, #f1f5f9, #f8fafc): text tokens at 4.5:1,
+   graphic tokens (chart marks) at 3:1. Three failed and were corrected; see the
+   notes at --ink-muted, --abc-* and --axis. Re-run the audit on any change.
+   --------------------------------------------------------------------------- */
+:root {
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+
+  --ink: #0f172a;
+  --ink-secondary: #334155;
+  /* Slate-500 darkened 40% toward slate-600. Slate-500 puro (#64748b) passa em
+     branco (4.76) mas REPROVA sobre --surface-2 (4.34). Este valor passa nos
+     três fundos (5.69 / 5.19 / 5.44) sem colapsar a hierarquia de três níveis
+     do texto (17.85 / 10.35 / 5.69) — então texto secundário pode circular
+     entre as superfícies sem reauditoria a cada mudança de layout. */
+  --ink-muted: #58687d;
+
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  /* Azul da marca (símbolo da logo). Coincide em hex com --series-1/--ring, mas
+     é um token à parte de propósito: identidade não é dado nem foco. Trocar a
+     cor da marca não pode arrastar junto a cor da primeira série do gráfico
+     (que passou por validação de daltonismo) nem o anel de foco. */
+  --brand: #2563eb;
+
+  --primary: #1e40af;
+  --primary-hover: #1d4ed8;
+  --on-primary: #ffffff;
+  --ring: #2563eb;
+
+  --positive: #15803d;
+  --negative: #dc2626;
+  --warning: #b45309;
+
+  /* Chart — categorical (identity). Fixed order, never cycled. */
+  --series-1: #2563eb;
+  --series-2: #d97706;
+
+  /* Chart — sequential (magnitude). One hue, light→dark; A is the darkest.
+     Cada degrau precisa de 3:1 contra --surface (mínimo de objeto gráfico), não
+     só de separação entre si: uma barra que some no cartão não comunica nada.
+     Escada blue 900/700/500 = 10.36 / 6.70 / 3.68. O antigo --abc-c (#93c5fd)
+     dava 1.80 — classe C era praticamente invisível, no gráfico e no quadradinho
+     da legenda/tabela. --abc-a deixou de repetir o hex de --primary: magnitude e
+     marca/ação são semânticas diferentes. */
+  --abc-a: #1e3a8a;
+  --abc-b: #1d4ed8;
+  --abc-c: #3b82f6;
+
+  /* Grade: decorativa, isenta de mínimo de contraste. Eixo: é TEXTO (rótulos de
+     tick), então vale 4.5:1 — o antigo #94a3b8 dava 2.56. */
+  --grid: #e2e8f0;
+  --axis: #64748b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+
+  --color-ink: var(--ink);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+
+  --color-border-subtle: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-brand: var(--brand);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-abc-a: var(--abc-a);
+  --color-abc-b: var(--abc-b);
+  --color-abc-c: var(--abc-c);
+
+  --font-sans: var(--font-inter);
+}
+
+/* Cor de borda padrão. Precisa estar em `@layer base`: fora de camada, esta
+   regra é CSS "sem camada" e vence QUALQUER utilitário do Tailwind, que vive em
+   `@layer utilities`. Sem o layer, `border-primary` e `border-transparent` eram
+   silenciosamente ignorados em todo o app — a borda saía sempre cinza, e o
+   sintoma só aparecia onde a borda não estava coberta por um fundo (o
+   sublinhado das sub-abas de Vendas). */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+}
+
+@layer base {
+  body {
+    background: var(--background);
+    color: var(--ink);
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Never remove focus rings. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+/* `@layer components`, e não CSS solto, pelo mesmo motivo da cor de borda
+   acima: a ordem do Tailwind é theme → base → components → utilities, então
+   daqui um utilitário ainda consegue sobrescrever. Importa em `.control`, que
+   declara `display` — solta, a regra vencia `hidden` e `lg:flex` em qualquer
+   elemento com a classe, e um item de menu que deveria sumir numa tela estreita
+   continuava na tela. */
+@layer components {
+  /* Money and counts must align on the decimal across rows — non-negotiable in
+     a report. Applied to every numeric value, not just tables. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* Controles interativos. 36px é o certo para um dashboard denso operado com
+     mouse; a regra de 44×44 existe para o DEDO, então ela entra quando o
+     ponteiro é grosso (touch), em vez de inchar a barra de filtros no
+     desktop. */
+  .control {
+    min-height: 2.25rem; /* 36px */
+    display: inline-flex;
+    align-items: center;
+  }
+
+  @media (pointer: coarse) {
+    .control {
+      min-height: 2.75rem; /* 44px */
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
