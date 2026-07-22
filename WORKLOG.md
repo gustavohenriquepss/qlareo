@@ -3,6 +3,49 @@
 Registro honesto do desenvolvimento. O produto nasceu como spin-off do app VTEX
 IO [`vtex-sales-reports`](https://github.com/gustavohenriquepss/vtex-sales-reports).
 
+## 2026-07-22 — Round-trip real Node → pg → Postgres (última lacuna fechada)
+
+O usuário instalou o Node.js oficial (v24.18.0 + npm 12.0.1), o que finalmente
+permitiu instalar o driver `pg` e exercitar o caminho de produção inteiro. Isto
+converte em "verificado" o item que eu vinha declarando abaixo como pendente
+("a cola Node do driver pg / o round-trip real").
+
+### ✅ Verificado de verdade (Node real + driver pg real + Postgres 18)
+
+- `npm install` + `npm i pg` + `npm i -D @types/pg` — `pg@^8.22`,
+  `@types/pg@^8.20` agora declarados no `package.json` (antes não existiam).
+- Removido o stub manual `store/postgres/pg.d.ts` (só existia para o `tsc` não
+  reclamar sem `@types/pg`). Com os tipos reais, ele colidiria.
+- **`tsc --noEmit` limpo** e **151 testes verdes** com o Node de verdade (antes
+  eu só tinha rodado via o node.exe embutido do Playwright).
+- **`npm run migrate` real**: aplicou `001_init`, registrou em
+  `schema_migrations`, e numa segunda rodada disse "nada a aplicar"
+  (idempotência confirmada; a migration usa `IF NOT EXISTS`).
+- **Round-trip do caminho de PRODUÇÃO** (`createPgClient` → `PostgresOrderStore`
+  → driver `pg` → PG18), não mock: upsert com itens, getOrders com JOIN de itens
+  na ordem de `line_no`, `BIGINT` chegando como number, re-upsert sem itens
+  preservando detalhe (o `OR`), `sync_state`, e isolamento de tenant — todos
+  passaram contra o banco real.
+- **Servidor em modo Postgres**: subiu com `DATABASE_URL` (a fábrica fez o
+  `import()` dinâmico do `pg`), e os endpoints `sales-by-period` e `top-products`
+  (este exercita o JOIN de itens) responderam lendo do banco; `x-api-key`
+  ausente → 401. Dados sintéticos e scripts temporários removidos; banco limpo.
+
+### ❌ Achado real no caminho (corrigido)
+
+- Os tipos oficiais do `pg` (`Pool.query`) exigem `params: any[]` **mutável**,
+  mas a porta `SqlClient` usa `ReadonlyArray<unknown>` de propósito (a porta não
+  deve permitir que a impl mute os parâmetros de quem chama). O `tsc` pegou:
+  `readonly ... não atribuível a any[]`. Corrigido só na fronteira com o driver
+  (`store/postgres/pgClient.ts`), copiando com `[...params]` no ponto exato da
+  chamada ao `pg` — sem enfraquecer o contrato da porta.
+
+### ⚠️ O que ainda não foi verificado
+
+- **Nada validado contra a Orders API real da VTEX.** O `sync` (VTEX → banco) foi
+  exercitado só com `fetch` mockado; o store foi testado com dados sintéticos. O
+  primeiro contato real depende de credencial appKey/appToken de uma loja.
+
 ## 2026-07-21 — SQL verificado contra Postgres 18 real
 
 O usuário instalou PostgreSQL 18 na máquina. Isso permitiu fechar a lacuna que

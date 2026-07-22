@@ -46,7 +46,7 @@ export function createPgClient(
       text: string,
       params?: ReadonlyArray<unknown>
     ): Promise<SqlResult<T>> {
-      const res = await pool.query<T>(text, params)
+      const res = await pool.query<T>(text, params ? [...params] : undefined)
       return { rows: res.rows, rowCount: res.rowCount ?? 0 }
     },
 

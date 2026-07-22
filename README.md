@@ -96,14 +96,18 @@ npm run sync -- --from=2026-01-01 --to=2026-01-31 --items   # VTEX → banco
 npm start                 # servidor lê do banco em http://localhost:3000
 ```
 
-O SQL do store foi verificado contra um Postgres 18 real (isolamento de tenant,
-UPSERT, preservação de itens, JOIN) — o script está em
-[`db/verify_store.sql`](db/verify_store.sql) e roda com
-`psql -f db/verify_store.sql` num banco com as migrations aplicadas.
+O caminho Postgres foi verificado de ponta a ponta contra um Postgres 18 real,
+pelo código de produção (`createPgClient` → `PostgresOrderStore` → driver `pg`):
+`npm run migrate` aplica e é idempotente; upsert, JOIN de itens, preservação de
+detalhe no re-upsert, `sync_state` e isolamento de tenant conferem no banco; e o
+servidor em modo Postgres responde os relatórios lendo do banco. O SQL sozinho
+também tem um script de asserções em [`db/verify_store.sql`](db/verify_store.sql)
+(`psql -f db/verify_store.sql` num banco com as migrations aplicadas).
 
 Sem `DATABASE_URL`, `npm start` sobe em **modo memória** (store vazio, sem
-Postgres) — útil para desenvolvimento. A instalação do driver `pg` (`npm i pg`,
-`npm i -D @types/pg`) só é necessária para o modo Postgres.
+Postgres) — útil para desenvolvimento. O driver `pg` já está no `package.json`;
+como o Postgres é carregado por `import()` dinâmico, o modo memória (e o
+`npm test`) nunca o importa.
 
 ### Credenciais
 
