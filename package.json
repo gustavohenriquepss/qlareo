@@ -13,6 +13,7 @@
     "sync": "node --import ./register-ts.mjs scripts/sync.ts",
     "migrate": "node --import ./register-ts.mjs scripts/migrate.ts",
     "demo": "node --import ./register-ts.mjs demo.ts",
+    "seed": "node --import ./register-ts.mjs scripts/seed-dev-server.ts",
     "test": "node --import ./register-ts.mjs --test",
     "typecheck": "tsc --noEmit"
   },
