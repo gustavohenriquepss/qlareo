@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { Logo } from "@/components/Logo";
 import { Nav } from "@/components/Nav";
@@ -84,6 +85,7 @@ export default function RootLayout({
             <main className="flex-1 pt-6">{children}</main>
           </div>
         </div>
+        <Analytics />
       </body>
     </html>
   );
