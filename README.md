@@ -1,8 +1,9 @@
 # QLAREO
 
 Relatórios de vendas simples e confiáveis para lojistas **VTEX**, como
-**aplicação standalone** — um serviço próprio que consulta a Orders API da loja
-e entrega os quatro relatórios que respondem "como foi a venda":
+**aplicação standalone** — um serviço próprio que consulta a Orders API da loja,
+guarda os pedidos em Postgres e entrega, numa interface web, os quatro
+relatórios que respondem "como foi a venda":
 
 | Relatório | Responde |
 |---|---|
@@ -32,9 +33,11 @@ VTEX IO precisa declarar como intrínsecas:
 
 **Estado atual:** o banco (PostgreSQL) já existe. Os relatórios leem do store
 (`DATABASE_URL` presente → Postgres; ausente → memória, para dev/demo). O `sync`
-popula o store a partir da VTEX. O que ainda é roadmap: sync **incremental** via
-Orders Feed (hoje o sync busca um intervalo por vez) — a marca d'água
-(`sync_state`) já está no schema para isso.
+popula o store a partir da VTEX. E existe um **front-end Next.js** (`web/`) que
+consome a API: as quatro telas, com filtros linkáveis, gráficos e exportação
+CSV. O que ainda é roadmap: sync **incremental** via Orders Feed (hoje o sync
+busca um intervalo por vez) — a marca d'água (`sync_state`) já está no schema
+para isso.
 
 ## Arquitetura
 
@@ -62,10 +65,15 @@ qlareo/
 ├── db/migrations/     # schema versionado (*.sql)
 ├── server/            # HTTP nativo: relatórios lêem do store
 ├── scripts/           # sync e migrate (CLIs)
-└── __tests__/         # runner nativo do Node
+├── __tests__/         # runner nativo do Node
+└── web/               # ── FRONT-END (Next.js, projeto npm à parte) ──
+    ├── app/           # uma rota por relatório (Server Components)
+    │   └── api/export/[key]/   # CSV como URL, não Blob no browser
+    ├── components/    # tabela, filtros, estados + charts/ (Recharts)
+    └── lib/           # api (server-only), filters (query string), csv, exports
 ```
 
-Duas fronteiras carregam o design:
+Três fronteiras carregam o design:
 
 - **`transport/`** — o que muda entre o app IO e o standalone. No app, o
   transporte é a sessão do admin; aqui é um par appKey/appToken. `core/` e
@@ -74,16 +82,22 @@ Duas fronteiras carregam o design:
   `OrderStore`, não da API. O `sync` preenche o store a partir do adapter. A
   implementação Postgres fica atrás da porta `SqlClient`, então o único arquivo
   que importa o driver `pg` é `store/postgres/pgClient.ts`.
+- **`web/`** — projeto npm separado, que fala com o backend só por HTTP. Não
+  importa `core/` nem toca no banco: se a API muda, muda um cliente; e o
+  front-end pode ser implantado em outro lugar (ou trocado) sem mexer no motor.
 
 Fluxo: `sync` (VTEX → store) roda periodicamente; o servidor responde relatórios
-lendo do store. Isolamento de tenant é invariante — todo acesso ao store leva o
+lendo do store; o `web/` renderiza esses relatórios no servidor Next. Isolamento de tenant é invariante — todo acesso ao store leva o
 `store_account` (single-tenant hoje, schema pronto para multi).
 
 ## Rodar
 
-Requer **Node ≥ 22.18** (execução nativa de TypeScript; sem passo de build).
+São **dois processos**: o backend na raiz (porta 3000) e o front-end em `web/`
+(porta 3001). O backend requer **Node ≥ 22.18** (execução nativa de TypeScript;
+sem passo de build) e não tem dependência de runtime além do driver `pg`.
 
 ```bash
+# ── backend (raiz) ──
 cp .env.example .env      # preencha as credenciais VTEX
 
 npm run demo              # roda os 4 relatórios com dados sintéticos (sem VTEX)
@@ -93,8 +107,21 @@ npm test                  # 151 testes, zero dependência externa
 docker compose up -d      # sobe o Postgres local
 npm run migrate           # aplica db/migrations/*.sql
 npm run sync -- --from=2026-01-01 --to=2026-01-31 --items   # VTEX → banco
-npm start                 # servidor lê do banco em http://localhost:3000
+npm start                 # API em http://localhost:3000
 ```
+
+```bash
+# ── front-end (web/), noutro terminal ──
+cd web
+cp .env.example .env.local   # QLAREO_API_URL + a MESMA QLAREO_API_KEY do backend
+npm install
+npm run dev                  # interface em http://localhost:3001
+```
+
+O `web/` só sobe telas úteis com o backend de pé: cada página é um Server
+Component que busca da API a cada requisição (`cache: "no-store"` — relatório de
+vendas não serve número velho sem o usuário pedir). Com o backend fora do ar, a
+tela mostra o erro e o que fazer, em vez de uma página de erro genérica.
 
 O caminho Postgres foi verificado de ponta a ponta contra um Postgres 18 real,
 pelo código de produção (`createPgClient` → `PostgresOrderStore` → driver `pg`):
@@ -122,6 +149,18 @@ com o papel **OMS - View order**. Configure por ambiente (nunca no código):
 | `DATABASE_URL` | conexão Postgres; ausente → store em memória (dev) |
 | `PORT` | porta do servidor (default 3000) |
 
+E no `web/.env.local` (front-end):
+
+| Variável | Para quê |
+|---|---|
+| `QLAREO_API_URL` | onde o backend ouve (default `http://localhost:3000`) |
+| `QLAREO_API_KEY` | mesma chave do backend, mandada no `x-api-key` |
+
+**Sem prefixo `NEXT_PUBLIC_`, de propósito.** A chave é lida só em Server
+Components (`web/lib/api.ts`) e viaja numa chamada servidor→servidor; o browser
+recebe apenas números já renderizados. Com o prefixo, a chave iria no bundle e
+qualquer visitante leria o faturamento da loja.
+
 ### API
 
 ```
@@ -135,6 +174,36 @@ GET /api/reports/promotions?from&to&scope
 `scope` ∈ `bruto` | `liquido` | `todos`. Todas as rotas (menos `/health`) exigem
 o header `x-api-key` quando `QLAREO_API_KEY` está definido.
 
+## Interface (`web/`)
+
+Next.js 16 + React 19, Tailwind v4 e Recharts. Uma rota por relatório, com os
+recortes de vendas como sub-rotas:
+
+| Rota | Tela |
+|---|---|
+| `/vendas` | Faturamento, pedidos e ticket médio por dia/semana/mês |
+| `/vendas/pagamento`, `/vendas/seller` | os mesmos números, quebrados por meio de pagamento e por seller |
+| `/clientes` | Novos vs. recorrentes e taxa de recompra |
+| `/produtos` | Top produtos e curva ABC |
+| `/promocoes` | Receita com desconto e custo do desconto |
+
+Três decisões que explicam a maior parte do código:
+
+- **Os filtros vivem na query string**, não em estado de componente. A tela de
+  relatório precisa ser linkável ("o mês passado no líquido" é um link que se
+  manda para um colega), o botão voltar precisa funcionar e o recorte precisa
+  sobreviver ao reload. Os links do menu carregam a query atual — trocar de
+  relatório não perde o período.
+- **Exportação CSV é uma URL** (`/api/export/:key?from&to&scope`), não um `Blob`
+  gerado no browser: funciona como link comum, aceita nova aba, entra no
+  gerenciador de downloads, é anunciada por leitor de tela e dá para agendar num
+  `curl`. O catálogo de colunas fica num registro único (`web/lib/exports.ts`) —
+  cabeçalho de CSV é contrato com a planilha de alguém.
+- **A tela mostra recorte; o arquivo traz o período inteiro.** A ABC desenha 12
+  barras, a tabela abre fechada — o CSV não herda nenhum desses limites, e não
+  leva linha de total nem preâmbulo de metadados (é o que faz o Excel errar as
+  colunas). Período e recorte vão no nome do arquivo.
+
 ## Privacidade — a diferença que importa neste modelo
 
 Ser standalone **inverte a postura de privacidade** do app VTEX IO, e isso é
@@ -145,15 +214,14 @@ consciente, não acidental:
   pedidos da loja. Consequências assumidas:
   - Token **nunca** em código, log ou repositório — só em ambiente/segredo,
     cifrado em repouso. O transporte jamais o coloca em URL.
-  - Ao introduzir banco, o serviço passa a **armazenar dados pessoais** (nome,
-    e-mail, endereço dos clientes da loja) e vira **operador sob a LGPD** —
-    exige base legal, contrato de operador, política de retenção e resposta a
-    incidente.
+  - Com o banco, o serviço **armazena dados pessoais** (nome, e-mail, endereço
+    dos clientes da loja) e é **operador sob a LGPD** — exige base legal,
+    contrato de operador, política de retenção e resposta a incidente.
 
-Enquanto não há banco, o QLAREO não persiste pedido nenhum: agrega em memória
-por requisição e responde só números. O passo para o banco é também o passo que
-aciona as obrigações acima — a decisão é comercial, e deve ser tomada de olhos
-abertos.
+Isso deixou de ser hipótese: rodando com `DATABASE_URL`, o `sync` persiste
+pedido e cliente. As obrigações acima valem a partir daí, e a decisão de operar
+assim é comercial — deve ser tomada de olhos abertos. (Sem `DATABASE_URL`, em
+modo memória, nada é persistido; mas isso é dev, não produção.)
 
 ## Licença
 
