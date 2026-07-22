@@ -14,9 +14,10 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 
+import { type OrderStore } from '../store/orderStore'
 import { type AppConfig } from './config'
 import { parseReportRequest } from './params'
-import { type AdapterFactory, runReport, vtexAdapterFactory } from './reports'
+import { runReport } from './reports'
 
 const REPORTS_PREFIX = '/api/reports/'
 
@@ -35,7 +36,7 @@ function authorized(req: IncomingMessage, config: AppConfig): boolean {
   return req.headers['x-api-key'] === config.apiKey
 }
 
-export function createApp(config: AppConfig, makeAdapter: AdapterFactory = vtexAdapterFactory) {
+export function createApp(config: AppConfig, store: OrderStore) {
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
@@ -58,7 +59,7 @@ export function createApp(config: AppConfig, makeAdapter: AdapterFactory = vtexA
         return sendJson(res, 400, { error: parsed.error })
       }
 
-      const result = await runReport(makeAdapter(config.vtex), parsed.value)
+      const result = await runReport(store, config.vtex.account, parsed.value)
       return sendJson(res, 200, result)
     } catch (err) {
       // Nunca vaze o token num corpo de erro.

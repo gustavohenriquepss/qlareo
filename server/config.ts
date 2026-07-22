@@ -18,6 +18,11 @@ export interface AppConfig {
    * facilitar o desenvolvimento local; em produção, defina.
    */
   apiKey?: string
+  /**
+   * Conexão Postgres. Presente -> relatórios leem do banco (produção). Ausente
+   * -> store em memória (dev/demo; começa vazio, populado pelo sync).
+   */
+  databaseUrl?: string
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -49,5 +54,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       environment: env.VTEX_ENVIRONMENT,
     },
     apiKey: env.QLAREO_API_KEY,
+    databaseUrl: env.DATABASE_URL,
   }
 }

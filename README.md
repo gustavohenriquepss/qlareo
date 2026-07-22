@@ -20,18 +20,21 @@ e entrega os quatro relatórios que respondem "como foi a venda":
 
 ## Por que standalone (o que se ganha)
 
-Rodar como serviço próprio, com banco no futuro, remove as duas limitações que
-o app VTEX IO precisa declarar como intrínsecas:
+Rodar como serviço próprio, com banco local, remove as duas limitações que o app
+VTEX IO precisa declarar como intrínsecas:
 
-- **Sem o teto de 2.000 pedidos** dos relatórios de item: com sync incremental
-  (o Orders Feed é o primitivo), o custo do detalhe por pedido é pago uma vez.
+- **Sem o teto de pedidos por consulta** nos relatórios de item: o `sync` paga o
+  custo de puxar (e enriquecer) da API uma vez e grava no banco; os relatórios
+  leem do banco, baratos.
 - **Sem a janela de ~24 meses**: uma vez armazenado, o histórico acumula além do
   que a API mostra. Com o tempo, "novos vs. recorrentes" fica mais correto que o
   próprio Admin.
 
-> Nota honesta: este MVP ainda **não** tem banco nem sync incremental — ele
-> consulta a Orders API a cada requisição, como o app IO. A arquitetura está
-> pronta para o banco entrar; o ganho acima é o roadmap, não o estado atual.
+**Estado atual:** o banco (PostgreSQL) já existe. Os relatórios leem do store
+(`DATABASE_URL` presente → Postgres; ausente → memória, para dev/demo). O `sync`
+popula o store a partir da VTEX. O que ainda é roadmap: sync **incremental** via
+Orders Feed (hoje o sync busca um intervalo por vez) — a marca d'água
+(`sync_state`) já está no schema para isso.
 
 ## Arquitetura
 
@@ -44,26 +47,37 @@ qlareo/
 │   ├── types.ts       # modelo canônico de pedido (a fronteira)
 │   ├── adapter.ts     # interface PlatformAdapter (a porta)
 │   ├── reports.ts     # os 4 relatórios
-│   ├── scope.ts       # recorte bruto/líquido/todos
-│   ├── money.ts       # unidades mínimas inteiras
-│   └── time.ts        # truncamento por fuso
+│   └── scope|money|time.ts
 ├── adapters/vtex/     # ── ESPECÍFICO DA VTEX ──
 │   ├── mapper.ts      # formato cru da OMS → canônico
 │   └── orders.ts      # paginação + fatiamento do teto de 3.000
 ├── transport/
 │   └── fetchHttpClient.ts   # Orders API via fetch + appKey/appToken
-├── server/
-│   ├── main.ts        # createApp: HTTP nativo, roteamento, auth
-│   ├── reports.ts     # orquestra adapter + core
-│   ├── params.ts      # validação da query
-│   └── start.ts       # entrypoint (npm start)
-└── __tests__/         # runner nativo do Node, sem dependência
+├── store/             # ── PERSISTÊNCIA ──
+│   ├── orderStore.ts  # a porta (interface OrderStore)
+│   ├── memoryStore.ts # impl em memória (dev/teste)
+│   ├── sync.ts        # adapter → store
+│   ├── sql.ts         # porta SqlClient (isola o driver pg)
+│   └── postgres/      # impl Postgres (isolada; único lugar com `pg`)
+├── db/migrations/     # schema versionado (*.sql)
+├── server/            # HTTP nativo: relatórios lêem do store
+├── scripts/           # sync e migrate (CLIs)
+└── __tests__/         # runner nativo do Node
 ```
 
-A diferença de fundo para o app IO está em **`transport/`**: no app, o transporte
-é a sessão do admin logado; aqui é um par appKey/appToken. O `core/` e o
-`adapters/vtex/` são idênticos — trocar de transporte (ou de plataforma) não
-toca em uma linha de relatório.
+Duas fronteiras carregam o design:
+
+- **`transport/`** — o que muda entre o app IO e o standalone. No app, o
+  transporte é a sessão do admin; aqui é um par appKey/appToken. `core/` e
+  `adapters/vtex/` são idênticos aos do app.
+- **`store/`** — o que o banco adiciona. Os relatórios lêem da interface
+  `OrderStore`, não da API. O `sync` preenche o store a partir do adapter. A
+  implementação Postgres fica atrás da porta `SqlClient`, então o único arquivo
+  que importa o driver `pg` é `store/postgres/pgClient.ts`.
+
+Fluxo: `sync` (VTEX → store) roda periodicamente; o servidor responde relatórios
+lendo do store. Isolamento de tenant é invariante — todo acesso ao store leva o
+`store_account` (single-tenant hoje, schema pronto para multi).
 
 ## Rodar
 
@@ -71,11 +85,20 @@ Requer **Node ≥ 22.18** (execução nativa de TypeScript; sem passo de build).
 
 ```bash
 cp .env.example .env      # preencha as credenciais VTEX
-npm start                 # sobe o servidor em http://localhost:3000
 
 npm run demo              # roda os 4 relatórios com dados sintéticos (sem VTEX)
-npm test                  # 127 testes, zero dependência externa
+npm test                  # 151 testes, zero dependência externa
+
+# Com banco (produção-like):
+docker compose up -d      # sobe o Postgres local
+npm run migrate           # aplica db/migrations/*.sql
+npm run sync -- --from=2026-01-01 --to=2026-01-31 --items   # VTEX → banco
+npm start                 # servidor lê do banco em http://localhost:3000
 ```
+
+Sem `DATABASE_URL`, `npm start` sobe em **modo memória** (store vazio, sem
+Postgres) — útil para desenvolvimento. A instalação do driver `pg` (`npm i pg`,
+`npm i -D @types/pg`) só é necessária para o modo Postgres.
 
 ### Credenciais
 
@@ -87,6 +110,7 @@ com o papel **OMS - View order**. Configure por ambiente (nunca no código):
 | `VTEX_ACCOUNT` | nome da conta (subdomínio) |
 | `VTEX_APP_KEY` / `VTEX_APP_TOKEN` | credencial de leitura dos pedidos |
 | `QLAREO_API_KEY` | protege o endpoint do próprio QLAREO (`x-api-key`) |
+| `DATABASE_URL` | conexão Postgres; ausente → store em memória (dev) |
 | `PORT` | porta do servidor (default 3000) |
 
 ### API

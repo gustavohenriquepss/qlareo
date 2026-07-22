@@ -1,18 +1,18 @@
 /**
- * reports.ts — orquestra adapter + core para cada relatório.
+ * reports.ts — gera cada relatório lendo do STORE local.
  * -----------------------------------------------------------------------------
- * Espelho do handler do app VTEX IO, mas independente de framework: recebe os
- * parâmetros já validados e devolve o objeto do relatório. A única linha que
- * conhece a plataforma é a que instancia o VtexAdapter — trocar de plataforma
- * (ou de transporte) é trocar essa linha.
+ * Mudança de fundo do banco: os relatórios não consultam mais a Orders API a
+ * cada requisição — leem do store, que o sync mantém atualizado. Some o teto de
+ * 3.000 por consulta (o sync já contornou ao gravar) e, com histórico
+ * acumulado, some também a janela de ~24 meses.
+ *
+ * Os relatórios de item (top produtos, promoções) leem os itens já
+ * sincronizados; não há mais enriquecimento em tempo de requisição.
  * -----------------------------------------------------------------------------
  */
-import { VtexAdapter } from '../adapters/vtex'
 import {
-  type CanonicalOrder,
   type DateRange,
   type Grain,
-  type PlatformAdapter,
   type SalesScope,
   filterByScope,
   newVsReturning,
@@ -20,10 +20,7 @@ import {
   salesByPeriod,
   topProductsABC,
 } from '../core'
-import { FetchHttpClient, type VtexCredentials } from '../transport/fetchHttpClient'
-
-/** Teto dos relatórios que enriquecem item a item (uma request por pedido). */
-export const ENRICH_CAP = 2000
+import { type OrderStore } from '../store/orderStore'
 
 export type ReportName =
   | 'sales-by-period'
@@ -38,29 +35,16 @@ export interface ReportRequest {
   grain: Grain
 }
 
-export interface LimitExceeded {
-  excedeuLimite: true
-  totalPedidos: number
-  limite: number
-  mensagem: string
-}
-
-/** Fábrica de adapter por credencial. Injetável — em teste, um adapter falso. */
-export type AdapterFactory = (creds: VtexCredentials) => PlatformAdapter
-
-/**
- * Fábrica padrão: adapter VTEX sobre o transporte fetch. Um serviço multi-tenant
- * chamaria isto com as credenciais do tenant da requisição.
- */
-export const vtexAdapterFactory: AdapterFactory = (creds) =>
-  new VtexAdapter(new FetchHttpClient(creds))
+const ITEM_REPORTS: ReportName[] = ['top-products', 'promotions']
 
 export async function runReport(
-  adapter: PlatformAdapter,
+  store: OrderStore,
+  storeAccount: string,
   req: ReportRequest
 ): Promise<unknown> {
-  const raw = await adapter.fetchOrders(req.range)
-  const scoped = filterByScope(raw, req.scope)
+  const withItems = ITEM_REPORTS.includes(req.report)
+  const orders = await store.getOrders({ storeAccount, range: req.range, withItems })
+  const scoped = filterByScope(orders, req.scope)
 
   if (req.report === 'sales-by-period') {
     return salesByPeriod(scoped, req.grain)
@@ -69,25 +53,20 @@ export async function runReport(
     return newVsReturning(scoped)
   }
 
-  // Relatórios com detalhe de item: respeitam o teto antes de enriquecer.
-  const over = overCap(scoped)
-  if (over) return over
+  // Relatórios de item: se há pedidos mas nenhum com detalhe, o período ainda
+  // não foi sincronizado com itens — diga isso em vez de devolver zeros.
+  if (scoped.length > 0 && !scoped.some((o) => o.items && o.items.length > 0)) {
+    return {
+      itensNaoSincronizados: true,
+      totalPedidos: scoped.length,
+      mensagem:
+        'Os pedidos deste período ainda não têm detalhe de item sincronizado. ' +
+        'Rode o sync com itens (npm run sync -- --items) para este intervalo.',
+    }
+  }
 
-  const withItems = await adapter.enrichWithItems(scoped)
   if (req.report === 'top-products') {
-    return { produtos: topProductsABC(withItems), totalPedidos: scoped.length }
+    return { produtos: topProductsABC(scoped), totalPedidos: scoped.length }
   }
-  return { ...promoEffectiveness(withItems), pedidosAnalisados: scoped.length }
-}
-
-function overCap(scoped: CanonicalOrder[]): LimitExceeded | null {
-  if (scoped.length <= ENRICH_CAP) return null
-  return {
-    excedeuLimite: true,
-    totalPedidos: scoped.length,
-    limite: ENRICH_CAP,
-    mensagem:
-      `O período tem ${scoped.length} pedidos; este relatório detalha item a ` +
-      `item e está limitado a ${ENRICH_CAP} por consulta. Escolha um período menor.`,
-  }
+  return { ...promoEffectiveness(scoped), pedidosAnalisados: scoped.length }
 }

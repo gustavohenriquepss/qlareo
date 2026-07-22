@@ -3,6 +3,50 @@
 Registro honesto do desenvolvimento. O produto nasceu como spin-off do app VTEX
 IO [`vtex-sales-reports`](https://github.com/gustavohenriquepss/vtex-sales-reports).
 
+## 2026-07-21 — Camada de banco (PostgreSQL)
+
+Objetivo: sair do "consulta a Orders API a cada request" para "lê de um banco
+local, sincronizado", removendo os tetos da API. Decisão de tenancy explicada ao
+usuário (single vs multi) — escolhido **single-tenant com schema pronto para
+multi** (coluna `store_account` em todas as tabelas/PKs).
+
+### ✅ Deu certo
+
+- **Fronteira nova bem posta**: porta `OrderStore` (interface), impl em memória
+  (referência testável) e impl Postgres atrás de uma segunda porta `SqlClient` —
+  o único arquivo que importa o driver `pg` é `store/postgres/pgClient.ts`. O
+  resto do código nunca vê `pg`.
+- **Relatórios religados ao store**: o servidor lê da interface, não da API. O
+  `sync` (adapter → store) é o que preenche. Import dinâmico do Postgres mantém
+  `pg` fora do caminho de dev/teste (nem instalado aqui).
+- **Verificação**: `tsc --noEmit` limpo e **151 testes verdes** (+24: memoryStore,
+  sync, Postgres store com SqlClient falso, servidor lendo do store). Servidor
+  sobe em modo memória pelo entrypoint; demo intacto com os mesmos números.
+- **Isolamento de tenant testado**: `store_account` em todo query; teste garante
+  que uma loja nunca vê pedido de outra, e (no Postgres) que os valores vão
+  parametrizados, não interpolados.
+- **Schema honesto**: dinheiro em `BIGINT` centavos (a invariante de inteiro do
+  core), índices por created_at/status/product, `sync_state` como marca d'água
+  para o sync incremental futuro.
+
+### ❌ Deu errado / limites do ambiente
+
+- **Subagent do Postgres morreu por limite de gastos mensais** no meio da
+  verificação. Mas ele já tinha escrito todos os arquivos; revisei um a um e
+  rodei `tsc`/testes eu mesmo — o código estava correto (isolamento, UPSERT que
+  preserva `items_synced` com `OR`, JOIN preso ao tenant). Terminei o que
+  faltava (entrypoint `scripts/migrate.ts`, wiring da fábrica). Não spawnei outro
+  subagent — o caminho caro.
+- **NÃO consigo rodar Postgres nem instalar `pg` aqui** (sem npm, sem banco). O
+  `pg.d.ts` (stub mínimo do módulo) mantém o `tsc` limpo sem `@types/pg`. Então:
+  - **Verificado de verdade**: contrato do store (via memória), sync, servidor
+    lendo do store, e — no Postgres store — isolamento/parametrização/mapeamento
+    contra um `SqlClient` FALSO.
+  - **NÃO verificado**: o SQL real contra um Postgres de verdade. Isso depende de
+    `docker compose up` + `npm run migrate` + `@types/pg`/`pg` instalados —
+    passo do usuário. Não afirmo que "funciona no Postgres", só que compila e
+    passa os testes de contrato.
+
 ## 2026-07-21 — Nascimento do repositório standalone
 
 Decisão: o standalone vira **produto separado, em repo próprio** (não um modo do

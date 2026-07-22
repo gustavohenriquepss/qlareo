@@ -1,0 +1,34 @@
+# docker-compose.yml — Postgres para DESENVOLVIMENTO LOCAL do QLAREO.
+# -----------------------------------------------------------------------------
+# NÃO use estas credenciais em produção. Sobe um Postgres 16 pronto para o
+# runner de migrations e os testes de integração locais.
+#
+#   docker compose up -d          # sobe o banco
+#   npm run migrate               # aplica db/migrations/*.sql
+#   docker compose down           # derruba (o volume nomeado preserva os dados)
+#   docker compose down -v        # derruba E apaga os dados
+#
+# DATABASE_URL para a app:
+#   postgres://qlareo:qlareo@localhost:5432/qlareo
+# -----------------------------------------------------------------------------
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: qlareo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: qlareo
+      POSTGRES_USER: qlareo
+      POSTGRES_PASSWORD: qlareo # dev only — troque em qualquer ambiente real
+    ports:
+      - "5432:5432"
+    volumes:
+      - qlareo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qlareo -d qlareo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  qlareo_pgdata:
