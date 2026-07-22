@@ -112,9 +112,9 @@ async function main() {
   await store.upsertOrders(ACCOUNT, pedidos)
 
   const config = {
-    port: 3000,
+    port: Number(process.env.PORT ?? 3000),
     vtex: { account: ACCOUNT, appKey: 'dev', appToken: 'dev' },
-    apiKey: 'chave-de-teste-local',
+    apiKey: process.env.QLAREO_API_KEY ?? 'chave-de-teste-local',
   }
 
   createApp(config, store).listen(config.port, () => {
