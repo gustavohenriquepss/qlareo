@@ -83,9 +83,14 @@ export function Nav() {
         // Um item COM filhos aberto é um contêiner, não a página atual — quem
         // está em azul é o filho. Se os dois ficassem em azul, o menu teria
         // dois "você está aqui" na mesma coluna.
+        //
+        // O fundo precisa ser mais escuro que o do hover (bg-surface-2):
+        // do contrário o item ativo fica idêntico a "o mouse está em cima",
+        // e as duas informações — onde estou / onde o ponteiro está — se
+        // confundem.
         const openStyle = report.children
-          ? "bg-surface-2 text-ink"
-          : "bg-surface-2 text-primary";
+          ? "bg-border-strong/40 text-ink"
+          : "bg-border-strong/40 text-primary";
 
         return (
           // `contents` na horizontal: numa tela estreita não há hierarquia
@@ -101,14 +106,17 @@ export function Nav() {
               // idênticos lado a lado são ruído para quem navega por lista de
               // links. Na vertical o pai continua visível, porque ali ele é o
               // título da sublista indentada abaixo.
-              className={`control shrink-0 rounded-md px-3 text-sm font-medium transition-colors lg:flex lg:w-full ${
+              className={`control shrink-0 rounded-md border px-3 text-sm font-medium transition-colors lg:flex lg:w-full ${
                 open && report.children ? "hidden" : "inline-flex"
               } ${
                 open
                   ? // Fundo + cor + peso, não só cor: o item ativo precisa
-                    // sobreviver a quem não distingue o azul do cinza.
-                    openStyle
-                  : "text-ink-secondary hover:bg-surface-2 hover:text-ink"
+                    // sobreviver a quem não distingue o azul do cinza. A
+                    // borda usa o mesmo tom neutro dos botões de filtro
+                    // (border-border-subtle), para o botão ativo não virar
+                    // uma mancha de cor sem contorno.
+                    `${openStyle} border-border-subtle`
+                  : "border-transparent text-ink-secondary hover:bg-surface-2 hover:text-ink"
               }`}
             >
               {report.label}
