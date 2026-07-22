@@ -1,0 +1,21 @@
+{
+  "name": "qlareo",
+  "version": "0.1.0",
+  "description": "QLAREO — relatórios de vendas simples e confiáveis para lojistas VTEX (standalone).",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "start": "node --import ./register-ts.mjs server/start.ts",
+    "demo": "node --import ./register-ts.mjs demo.ts",
+    "test": "node --import ./register-ts.mjs --test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}
