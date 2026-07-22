@@ -3,6 +3,36 @@
 Registro honesto do desenvolvimento. O produto nasceu como spin-off do app VTEX
 IO [`vtex-sales-reports`](https://github.com/gustavohenriquepss/vtex-sales-reports).
 
+## 2026-07-21 — SQL verificado contra Postgres 18 real
+
+O usuário instalou PostgreSQL 18 na máquina. Isso permitiu fechar a lacuna que
+eu tinha declarado abaixo ("SQL real não verificado").
+
+### ✅ Verificado de verdade (contra PG18, não mock)
+
+- Setup sem eu tocar segredo: o usuário criou um role/db descartável
+  (`qlareo/qlareo`) no terminal dele; a senha do superusuário nunca passou pelo
+  chat. Conectei como `qlareo`.
+- **Migration `001_init.sql` aplica limpa** no PG18 (3 tabelas, 3 índices).
+- Rodei um script que replica as **queries exatas** do `PostgresOrderStore` com
+  dados sintéticos e asserções (`RAISE EXCEPTION` + `ON_ERROR_STOP`, exit 0):
+  1. isolamento de tenant + janela — loja-a nunca vê pedido da loja-b;
+  2. `items_synced`/itens corretos no seed;
+  3. re-upsert SEM itens: cabeçalho atualiza, `items_synced` fica TRUE (o `OR`),
+     itens preservados — a lógica mais delicada, confirmada no banco real;
+  4. o JOIN de itens preso ao tenant e à janela;
+  5. `sync_state` upsert (INSERT + ON CONFLICT UPDATE).
+- Banco deixado limpo (TRUNCATE dos dados sintéticos; schema intacto).
+
+### ⚠️ O que AINDA não foi verificado (e por quê)
+
+- **A cola Node do driver `pg`** (`store/postgres/pgClient.ts`) e o caminho
+  runtime completo Node→pg→Postgres. Motivo: **não há `npm` na máquina**, então
+  o driver `pg` não dá para instalar. O que verifiquei foi o SQL em si (a parte
+  com risco real de bug) via `psql`; o mapa linha→CanonicalOrder está coberto
+  por teste unitário com `SqlClient` falso. Falta só juntar os dois num round-trip
+  real, o que depende de `npm i pg`.
+
 ## 2026-07-21 — Camada de banco (PostgreSQL)
 
 Objetivo: sair do "consulta a Orders API a cada request" para "lê de um banco
