@@ -89,53 +89,73 @@ export default async function PromocoesPage({
         />
       </dl>
 
-      <Card
-        title="Onde foi a receita bruta"
-        hint="A receita bruta é a soma dos preços de lista. O desconto é a parte que não virou caixa."
-      >
-        <ProportionBar
-          segments={[
-            {
-              label: "Receita líquida",
-              value: report.receitaLiquida,
-              color: "var(--series-1)",
-              display: formatMoney(report.receitaLiquida),
-            },
-            {
-              label: "Desconto",
-              value: report.descontoTotal,
-              color: "var(--series-2)",
-              display: formatMoney(report.descontoTotal),
-            },
-          ]}
-        />
-      </Card>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card
+          title="Onde foi a receita bruta"
+          hint="A receita bruta é a soma dos preços de lista. O desconto é a parte que não virou caixa."
+        >
+          <ProportionBar
+            segments={[
+              {
+                label: "Receita líquida",
+                value: report.receitaLiquida,
+                color: "var(--series-1)",
+                display: formatMoney(report.receitaLiquida),
+              },
+              {
+                label: "Desconto",
+                value: report.descontoTotal,
+                color: "var(--series-2)",
+                display: formatMoney(report.descontoTotal),
+              },
+            ]}
+          />
+        </Card>
 
-      <Card
-        title="Alcance da promoção"
-        hint="Quantos pedidos do período levaram algum desconto."
-      >
-        <ProportionBar
-          segments={[
-            {
-              label: "Com desconto",
-              value: report.pedidosComDesconto,
-              color: "var(--series-2)",
-              display: `${formatInt(report.pedidosComDesconto)} (${formatPercent(pctPedidosComDesconto)})`,
-            },
-            {
-              label: "Sem desconto",
-              value: semDesconto,
-              color: "var(--series-1)",
-              display: `${formatInt(semDesconto)} (${formatPercent(100 - pctPedidosComDesconto)})`,
-            },
-          ]}
-        />
+        <Card
+          title="Alcance da promoção"
+          hint="Quantos pedidos do período levaram algum desconto."
+        >
+          <ProportionBar
+            segments={[
+              {
+                label: "Com desconto",
+                value: report.pedidosComDesconto,
+                color: "var(--series-2)",
+                display: `${formatInt(report.pedidosComDesconto)} (${formatPercent(pctPedidosComDesconto)})`,
+              },
+              {
+                label: "Sem desconto",
+                value: semDesconto,
+                color: "var(--series-1)",
+                display: `${formatInt(semDesconto)} (${formatPercent(100 - pctPedidosComDesconto)})`,
+              },
+            ]}
+          />
+        </Card>
+      </div>
 
-        <p className="mt-6 border-t border-border-subtle pt-3 text-xs leading-relaxed text-ink-muted">
+      <div className="flex items-start gap-3 rounded-md border border-border-subtle bg-surface-2 px-3 py-3">
+        <svg
+          className="mt-0.5 shrink-0 text-ink-muted"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+        <p className="text-xs leading-relaxed text-ink-secondary">
           {report.observacao}
         </p>
-      </Card>
+      </div>
     </div>
   );
 }
