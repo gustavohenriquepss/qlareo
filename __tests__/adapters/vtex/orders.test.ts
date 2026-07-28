@@ -260,7 +260,7 @@ describe('VtexAdapter#fetchOrders', () => {
 })
 
 // ============================================================================
-// enrichWithItems — itens preenchidos e concorrência respeitada
+// enrichWithDetail — itens preenchidos e concorrência respeitada
 // ============================================================================
 
 /** Fake do Get Order que conta chamadas em voo pra medir concorrência real. */
@@ -293,7 +293,7 @@ class FakeGetOrderClient implements HttpClient {
   }
 }
 
-describe('VtexAdapter#enrichWithItems', () => {
+describe('VtexAdapter#enrichWithDetail', () => {
   function setup(orderCount: number) {
     const orders: CanonicalOrder[] = []
     const itemsByOrderId = new Map<string, VtexOrderItem[]>()
@@ -324,7 +324,7 @@ describe('VtexAdapter#enrichWithItems', () => {
   test('preenche items de todos os pedidos com os itens do respectivo orderId', async () => {
     const { orders, http } = setup(10)
 
-    const out = await new VtexAdapter(http).enrichWithItems(orders, {
+    const out = await new VtexAdapter(http).enrichWithDetail(orders, {
       enrichConcurrency: 3,
     })
 
@@ -340,7 +340,7 @@ describe('VtexAdapter#enrichWithItems', () => {
   test('os itens vêm canônicos (skuId/unitPaidMinor/unitListMinor em centavos)', async () => {
     const { orders, http } = setup(1)
 
-    const [order] = await new VtexAdapter(http).enrichWithItems(orders)
+    const [order] = await new VtexAdapter(http).enrichWithDetail(orders)
 
     const item = order.items![0]
     assert.equal(item.skuId, 'sku-0')
@@ -353,7 +353,7 @@ describe('VtexAdapter#enrichWithItems', () => {
   test('nunca excede a concorrência configurada', async () => {
     const { orders, http } = setup(13)
 
-    await new VtexAdapter(http).enrichWithItems(orders, { enrichConcurrency: 3 })
+    await new VtexAdapter(http).enrichWithDetail(orders, { enrichConcurrency: 3 })
 
     assert.ok(http.maxInFlight <= 3, `maxInFlight foi ${http.maxInFlight}`)
     // sanidade: de fato paraleliza (não rodou serial)
@@ -363,7 +363,7 @@ describe('VtexAdapter#enrichWithItems', () => {
   test('usa concorrência default (4) quando não configurada', async () => {
     const { orders, http } = setup(9)
 
-    await new VtexAdapter(http).enrichWithItems(orders)
+    await new VtexAdapter(http).enrichWithDetail(orders)
 
     assert.ok(http.maxInFlight <= 4, `maxInFlight foi ${http.maxInFlight}`)
     assert.ok(http.maxInFlight > 1, 'esperava paralelismo, rodou serial')
@@ -372,7 +372,7 @@ describe('VtexAdapter#enrichWithItems', () => {
   test('preserva a ordem de entrada', async () => {
     const { orders, http } = setup(12)
 
-    const out = await new VtexAdapter(http).enrichWithItems(orders, {
+    const out = await new VtexAdapter(http).enrichWithDetail(orders, {
       enrichConcurrency: 5,
     })
 
@@ -385,7 +385,7 @@ describe('VtexAdapter#enrichWithItems', () => {
   test('não muta os pedidos de entrada', async () => {
     const { orders, http } = setup(2)
 
-    await new VtexAdapter(http).enrichWithItems(orders, { enrichConcurrency: 2 })
+    await new VtexAdapter(http).enrichWithDetail(orders, { enrichConcurrency: 2 })
 
     for (const o of orders) assert.equal(o.items, undefined)
   })
@@ -393,7 +393,7 @@ describe('VtexAdapter#enrichWithItems', () => {
   test('lista vazia não faz nenhuma chamada', async () => {
     const http = new FakeGetOrderClient(new Map())
 
-    const out = await new VtexAdapter(http).enrichWithItems([])
+    const out = await new VtexAdapter(http).enrichWithDetail([])
 
     assert.deepEqual(out, [])
     assert.equal(http.callCount, 0)

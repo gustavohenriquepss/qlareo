@@ -61,6 +61,22 @@ export interface CanonicalOrder {
   customerEmail?: string
   /** Só preenchido pelos adapters quando o relatório pede detalhe de item. */
   items?: CanonicalItem[]
+
+  // --- Atribuição: de ONDE veio a venda -------------------------------------
+  // Como `items`, estes campos vêm do DETALHE do pedido (na VTEX, o Get Order),
+  // não da listagem — logo só existem em pedido enriquecido. Todos opcionais, e
+  // a ausência é AMBÍGUA por construção: pode ser "não sincronizado" ou pode ser
+  // "o pedido realmente não tem" (compra sem cupom, produto digital sem
+  // endereço). Quem relata precisa distinguir os dois casos, não presumir zero.
+
+  /** UF de entrega ('SP'). Ausente em pedido digital ou retirada sem endereço. */
+  shippingState?: string
+  shippingCity?: string
+  /** Código do cupom usado. Ausente = compra sem cupom, o caso mais comum. */
+  coupon?: string
+  /** Origem da sessão que gerou o pedido ('google', 'facebook'). */
+  utmSource?: string
+  utmCampaign?: string
 }
 
 /** Intervalo fechado de datas. */

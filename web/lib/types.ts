@@ -38,19 +38,41 @@ export interface RetentionReport {
   aviso: string;
 }
 
-/** GET /api/reports/top-products */
-export interface ProductRow {
-  productId: string;
+export type AbcClass = "A" | "B" | "C";
+
+/**
+ * O que as linhas dos dois rankings de item têm em comum — a chave fica em cada
+ * tipo concreto. Espelha `RankedRow` de `core/reports.ts`, e é o que o
+ * `AbcChart` exige para desenhar qualquer um dos dois.
+ */
+export interface RankedRow {
   nome: string;
   receita: number;
   quantidade: number;
   pedidos: number;
-  classe: "A" | "B" | "C";
+  classe: AbcClass;
   percentualAcumulado: number;
+}
+
+/** GET /api/reports/top-products */
+export interface ProductRow extends RankedRow {
+  productId: string;
 }
 
 export interface ProductsReport {
   produtos: ProductRow[];
+  totalPedidos: number;
+}
+
+/** GET /api/reports/top-skus */
+export interface SkuRow extends RankedRow {
+  skuId: string;
+  /** A qual produto a variação pertence — a chave de junção com o ERP. */
+  productId: string;
+}
+
+export interface SkusReport {
+  skus: SkuRow[];
   totalPedidos: number;
 }
 
@@ -63,6 +85,65 @@ export interface PromoReport {
   percentualDescontoMedio: number;
   observacao: string;
   pedidosAnalisados: number;
+}
+
+/**
+ * GET /api/reports/canceled-orders
+ *
+ * Sem `faturamento` em lugar nenhum, de propósito: este dinheiro não entrou, e
+ * o nome do campo é a única defesa contra alguém somá-lo às vendas.
+ */
+export interface CanceledRow {
+  bucket: string;
+  pedidos: number;
+  valor: number;
+}
+
+export interface CanceledReport {
+  totalPedidos: number;
+  valorCancelado: number;
+  /** Todos os pedidos do período, de qualquer status — denominador da taxa. */
+  pedidosNoPeriodo: number;
+  taxa: number;
+  linhas: CanceledRow[];
+  porStatus: Array<{ status: string; pedidos: number; valor: number }>;
+  porPagamento: Array<{ metodo: string; pedidos: number; valor: number }>;
+}
+
+/** GET /api/reports/sales-by-region */
+export interface RegionRow {
+  uf: string;
+  faturamento: number;
+  pedidos: number;
+  ticketMedio: number;
+  participacao: number;
+}
+
+export interface RegionReport {
+  linhas: RegionRow[];
+  totalFaturamento: number;
+  totalPedidos: number;
+  /** Pedido digital ou retirada legitimamente não tem UF — não é lacuna. */
+  pedidosSemRegiao: number;
+}
+
+/** GET /api/reports/coupons-and-sources */
+export interface AttributionRow {
+  chave: string;
+  faturamento: number;
+  pedidos: number;
+  participacao: number;
+}
+
+export interface AttributionReport {
+  porCupom: AttributionRow[];
+  porOrigem: AttributionRow[];
+  porCampanha: AttributionRow[];
+  totalFaturamento: number;
+  totalPedidos: number;
+  pedidosComCupom: number;
+  faturamentoComCupom: number;
+  observacao: string;
 }
 
 /**

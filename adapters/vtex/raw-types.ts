@@ -69,7 +69,36 @@ export interface VtexListResponse {
   paging: VtexPaging
 }
 
-/** Envelope (parcial) do Get Order — só o que o enriquecimento consome. */
+/** Endereço de entrega. Só no Get Order. */
+export interface VtexShippingData {
+  address?: {
+    /** Sigla da UF ('SP'). A VTEX usa `state` para isso em contas BR. */
+    state?: string
+    city?: string
+  }
+}
+
+/**
+ * Atribuição de marketing. Só no Get Order.
+ *
+ * Ausente por completo no pedido que veio de tráfego direto e sem cupom — que é
+ * a maioria em muitas lojas. Ausência aqui NÃO é sinal de falta de sincronismo.
+ */
+export interface VtexMarketingData {
+  coupon?: string
+  utmSource?: string
+  utmMedium?: string
+  utmCampaign?: string
+}
+
+/**
+ * Envelope (parcial) do Get Order — só o que o enriquecimento consome.
+ *
+ * Os três blocos vêm na MESMA resposta: enriquecer com itens já traz endereço e
+ * atribuição de graça, sem uma segunda request por pedido.
+ */
 export interface VtexOrderDetail {
   items: VtexOrderItem[]
+  shippingData?: VtexShippingData
+  marketingData?: VtexMarketingData
 }

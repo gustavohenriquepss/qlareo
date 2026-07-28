@@ -1,7 +1,12 @@
 "use client";
 
 /**
- * Curva ABC — receita por produto, barra colorida pela classe.
+ * Curva ABC — receita por item, barra colorida pela classe.
+ *
+ * Serve produto E sku: o cálculo é o mesmo dos dois lados do backend
+ * (`rankItemsByRevenue` em core/reports.ts), então o desenho também é. O que
+ * muda é só a CHAVE de React e o substantivo da nota de rodapé — ambos vêm por
+ * prop, em vez de existirem dois gráficos que precisariam ser mantidos iguais.
  *
  * DECISÃO: isto NÃO é o gráfico de Pareto clássico. O Pareto põe a receita em
  * barras num eixo e o percentual acumulado numa linha em SEGUNDO eixo Y — e
@@ -24,7 +29,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { ProductRow } from "@/lib/types";
+import type { AbcClass, RankedRow } from "@/lib/types";
 import {
   formatInt,
   formatMoney,
@@ -37,13 +42,13 @@ import { TooltipRow, TooltipShell } from "./ChartTooltip";
 const AXIS = "var(--axis)";
 const GRID = "var(--grid)";
 
-export const CLASS_COLOR: Record<ProductRow["classe"], string> = {
+export const CLASS_COLOR: Record<AbcClass, string> = {
   A: "var(--abc-a)",
   B: "var(--abc-b)",
   C: "var(--abc-c)",
 };
 
-const CLASS_HELP: Record<ProductRow["classe"], string> = {
+const CLASS_HELP: Record<AbcClass, string> = {
   A: "até 80% da receita",
   B: "80–95%",
   C: "os últimos 5%",
@@ -52,8 +57,24 @@ const CLASS_HELP: Record<ProductRow["classe"], string> = {
 /** Acima disso, barras viram tiras ilegíveis — a tabela é o lugar certo. */
 const MAX_BARS = 12;
 
-export function AbcChart({ produtos }: { produtos: ProductRow[] }) {
-  const data = produtos.slice(0, MAX_BARS).map((p) => ({
+export function AbcChart<T extends RankedRow>({
+  linhas,
+  campoChave,
+  substantivo,
+}: {
+  linhas: T[];
+  /**
+   * NOME do campo que identifica a linha ("productId", "skuId") — não uma
+   * função `(row) => string`. Este é um Client Component, e função não
+   * atravessa a fronteira server→client: as páginas que chamam isto são Server
+   * Components, e o React só consegue serializar dados. O nome do campo é dado;
+   * a indexação acontece aqui, do lado do cliente.
+   */
+  campoChave: Extract<keyof T, string>;
+  /** Plural, minúsculo, para a nota de rodapé: "produtos", "SKUs". */
+  substantivo: string;
+}) {
+  const data = linhas.slice(0, MAX_BARS).map((p) => ({
     ...p,
     // Nome de produto é longo; corta no eixo e mostra inteiro no tooltip.
     rotulo: p.nome.length > 22 ? `${p.nome.slice(0, 21)}…` : p.nome,
@@ -111,7 +132,7 @@ export function AbcChart({ produtos }: { produtos: ProductRow[] }) {
             <Tooltip
               cursor={{ fill: "var(--surface-2)" }}
               content={(props) => {
-                const row = props.payload?.[0]?.payload as ProductRow | undefined;
+                const row = props.payload?.[0]?.payload as T | undefined;
                 if (!props.active || !row) return null;
                 return (
                   <TooltipShell title={row.nome}>
@@ -140,7 +161,7 @@ export function AbcChart({ produtos }: { produtos: ProductRow[] }) {
                 // 2px de respiro na cor da superfície entre barras vizinhas,
                 // para que dois blocos de mesma classe não virem um só.
                 <Cell
-                  key={p.productId}
+                  key={String(p[campoChave])}
                   fill={CLASS_COLOR[p.classe]}
                   stroke="var(--surface)"
                   strokeWidth={2}
@@ -151,10 +172,10 @@ export function AbcChart({ produtos }: { produtos: ProductRow[] }) {
         </ResponsiveContainer>
       </div>
 
-      {produtos.length > MAX_BARS && (
+      {linhas.length > MAX_BARS && (
         <p className="mt-2 text-xs text-ink-muted">
-          Mostrando os {MAX_BARS} maiores por receita. Os {produtos.length}{" "}
-          produtos do período estão na tabela abaixo.
+          Mostrando os {MAX_BARS} maiores por receita. Os {linhas.length}{" "}
+          {substantivo} do período estão na tabela abaixo.
         </p>
       )}
     </div>

@@ -53,10 +53,18 @@ export function FilterBar() {
   const isDefault =
     JSON.stringify(current) === JSON.stringify(defaultFilters());
 
-  // A granularidade só muda o eixo da sub-aba Vendas › Período. Nas outras ela
-  // não teria efeito visível, e um controle que não faz nada é pior que um
-  // controle ausente.
-  const showGrain = pathname === "/vendas";
+  // A granularidade muda o eixo das telas que desenham série temporal.
+  // Nas outras ela não teria efeito visível, e um controle que não faz nada é
+  // pior que um controle ausente.
+  const showGrain = pathname === "/vendas" || pathname === "/cancelados";
+
+  // O Recorte some em Cancelados pelo mesmo princípio, agora por um motivo mais
+  // forte: ele não é inócuo ali, é CONTRADITÓRIO. "Líquido" existe justamente
+  // para excluir cancelados, então oferecer o controle numa tela sobre eles
+  // convida o usuário a pedir um recorte que a tela ignora — e um filtro que
+  // não obedece é pior que um filtro ausente. O backend também ignora o
+  // parâmetro nessa rota (ver server/reports.ts).
+  const showScope = pathname !== "/cancelados";
 
   return (
     <div
@@ -109,6 +117,7 @@ export function FilterBar() {
         />
       </Field>
 
+      {showScope && (
       <Field label="Recorte">
         <div
           role="group"
@@ -136,6 +145,7 @@ export function FilterBar() {
           })}
         </div>
       </Field>
+      )}
 
       {showGrain && (
         <Field label="Agrupar por">

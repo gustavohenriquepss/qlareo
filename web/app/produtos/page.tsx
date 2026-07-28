@@ -129,7 +129,7 @@ export default async function ProdutosPage({
         title="Curva ABC por receita"
         hint="Classe A concentra até 80% da receita; B vai até 95%; C é a cauda."
       >
-        <AbcChart produtos={produtos} />
+        <AbcChart linhas={produtos} campoChave="productId" substantivo="produtos" />
       </Card>
 
       <Card

@@ -33,7 +33,22 @@ export class MemoryOrderStore implements OrderStore {
       // Sem items novos, preserva o detalhe já sincronizado (espelha o Postgres:
       // cabeçalho atualiza, itens só quando chegam de fato).
       const items = o.items ?? prev?.items
-      m.set(o.orderId, clone({ ...o, items }))
+      // Mesma regra para os campos de ATRIBUIÇÃO, que também só existem no
+      // pedido enriquecido: espelha o COALESCE do upsert Postgres. Um sync sem
+      // --items traz esses campos vazios, e sobrescrever apagaria a UF e o
+      // cupom que um sync anterior já pagou para buscar.
+      m.set(
+        o.orderId,
+        clone({
+          ...o,
+          items,
+          shippingState: o.shippingState ?? prev?.shippingState,
+          shippingCity: o.shippingCity ?? prev?.shippingCity,
+          coupon: o.coupon ?? prev?.coupon,
+          utmSource: o.utmSource ?? prev?.utmSource,
+          utmCampaign: o.utmCampaign ?? prev?.utmCampaign,
+        })
+      )
     }
   }
 

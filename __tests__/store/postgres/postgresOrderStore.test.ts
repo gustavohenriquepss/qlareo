@@ -162,9 +162,11 @@ describe('upsertOrders — detalhe de itens', () => {
     assert.equal(itemInserts[0].params[2], 0)
     assert.equal(itemInserts[1].params[2], 1)
 
-    // items_synced (11º param do UPSERT de orders) deve ser TRUE
+    // items_synced é o ÚLTIMO param do UPSERT de orders. Referenciado pelo fim,
+    // e não por índice fixo: o índice muda toda vez que uma coluna nova entra
+    // antes dele, e um teste que quebra por isso não está testando nada útil.
     const orderUpsert = fake.calls.find((c) => /INSERT INTO orders/i.test(c.text))!
-    assert.equal(orderUpsert.params[10], true)
+    assert.equal(orderUpsert.params.at(-1), true)
   })
 
   test('sem items: não toca em order_items; items_synced=FALSE no INSERT', async () => {
@@ -177,7 +179,7 @@ describe('upsertOrders — detalhe de itens', () => {
     assert.equal(touchedItems, false, 'não deveria mexer em order_items sem items')
 
     const orderUpsert = fake.calls.find((c) => /INSERT INTO orders/i.test(c.text))!
-    assert.equal(orderUpsert.params[10], false)
+    assert.equal(orderUpsert.params.at(-1), false)
   })
 })
 

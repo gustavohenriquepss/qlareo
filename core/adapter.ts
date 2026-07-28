@@ -32,11 +32,16 @@ export interface PlatformAdapter {
   fetchOrders(range: DateRange, options?: FetchOrdersOptions): Promise<CanonicalOrder[]>
 
   /**
-   * Preenche `items` dos pedidos informados. Separado de `fetchOrders` porque
-   * costuma ser MUITO mais caro (na VTEX, uma request por pedido) e só dois dos
-   * quatro relatórios precisam.
+   * Preenche o DETALHE dos pedidos informados: `items` e os campos de
+   * atribuição (`shippingState`, `coupon`, `utmSource`...). Separado de
+   * `fetchOrders` porque costuma ser MUITO mais caro — na VTEX, uma request por
+   * pedido — e só parte dos relatórios precisa.
+   *
+   * Chama-se `WithDetail`, e não `WithItems`, porque numa plataforma o mesmo
+   * payload que traz os itens traz também endereço e campanha: o nome antigo
+   * fazia parecer que sincronizar região custaria uma segunda passada.
    */
-  enrichWithItems(
+  enrichWithDetail(
     orders: CanonicalOrder[],
     options?: FetchOrdersOptions
   ): Promise<CanonicalOrder[]>

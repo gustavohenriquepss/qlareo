@@ -10,9 +10,10 @@
  *     fatiar o INTERVALO DE DATAS recursivamente até cada fatia caber em 3.000.
  *     Como cada fatia é um filtro diferente, cada uma ganha seu próprio teto.
  *
- *  2. ITENS SÓ NO GET ORDER. SKU/quantidade/preço não vêm na List; é uma request
- *     por pedido. Caro. Fica separado em `enrichVtexOrdersWithItems`, com
- *     concorrência limitada — rajada no OMS vira 429 e chega a derrubar o Admin.
+ *  2. DETALHE SÓ NO GET ORDER. SKU/quantidade/preço, endereço de entrega e
+ *     atribuição (cupom, UTM) não vêm na List; é uma request por pedido. Caro.
+ *     Fica separado em `enrichVtexOrdersWithDetail`, com concorrência limitada —
+ *     rajada no OMS vira 429 e chega a derrubar o Admin.
  *
  * Sem filtro de status na query (`f_status`) DE PROPÓSITO: o recorte de vendas é
  * por EXCLUSÃO no core (`core/scope.ts`), o que não exige conhecer a lista de
@@ -22,7 +23,7 @@
 import { type FetchOrdersOptions } from '../../core/adapter'
 import { type CanonicalOrder, type DateRange } from '../../core/types'
 import { type HttpClient } from './http'
-import { mapVtexItem, mapVtexOrder } from './mapper'
+import { mapVtexItem, mapVtexOrder, mapVtexOrderDetail } from './mapper'
 import {
   type VtexListResponse,
   type VtexOrderDetail,
@@ -128,13 +129,19 @@ function listOrders(
 }
 
 /**
- * Preenche `items` via Get Order, uma request por pedido, com no máximo
+ * Preenche o DETALHE do pedido via Get Order: itens, endereço de entrega e
+ * atribuição de marketing (cupom, UTM). Uma request por pedido, com no máximo
  * `enrichConcurrency` requests em voo. Pool de workers em vez de lotes fixos:
  * mantém a concorrência saturada sem esperar o pedido mais lento do lote.
  *
+ * Os três blocos vêm na MESMA resposta — endereço e cupom não custam request
+ * nenhuma além da que já se pagava pelos itens. Foi por isso que a função
+ * deixou de se chamar `...WithItems`: o nome antigo passou a esconder metade do
+ * que ela traz, e o custo de sincronizar região viraria uma decisão invisível.
+ *
  * Não muta a entrada — devolve cópias, na mesma ordem.
  */
-export async function enrichVtexOrdersWithItems(
+export async function enrichVtexOrdersWithDetail(
   http: HttpClient,
   orders: CanonicalOrder[],
   options: FetchOrdersOptions = {}
@@ -155,7 +162,11 @@ export async function enrichVtexOrdersWithItems(
         `${LIST_ORDERS_PATH}/${order.orderId}`,
         {}
       )
-      out[i] = { ...order, items: (detail.items ?? []).map(mapVtexItem) }
+      out[i] = {
+        ...order,
+        ...mapVtexOrderDetail(detail),
+        items: (detail.items ?? []).map(mapVtexItem),
+      }
     }
   }
 

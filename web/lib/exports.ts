@@ -22,10 +22,14 @@
 import { count, money, percent, type Sheet } from "./csv";
 import type { Filters } from "./filters";
 import type {
+  AttributionReport,
+  CanceledReport,
   ProductsReport,
+  RegionReport,
   PromoReport,
   RetentionReport,
   SalesReport,
+  SkusReport,
 } from "./types";
 
 export interface ExportSpec {
@@ -142,6 +146,37 @@ export const EXPORTS = {
     }),
   }),
 
+  skus: spec<SkusReport>({
+    report: "top-skus",
+    label: "SKUs e curva ABC",
+    slug: "skus-abc",
+    build: (d) => ({
+      // As DUAS chaves, e nesta ordem: o `skuId` é a linha, o `productId` é o
+      // que permite um PROCV agrupando as variações de volta em produto. Levar
+      // só uma delas obrigaria quem monta a planilha a voltar aqui.
+      columns: [
+        "Classe",
+        "SKU",
+        "ID do SKU",
+        "ID do produto",
+        "Receita (R$)",
+        "Quantidade",
+        "Pedidos",
+        "% acumulado",
+      ],
+      rows: d.skus.map((s) => [
+        s.classe,
+        s.nome,
+        s.skuId,
+        s.productId,
+        money(s.receita),
+        count(s.quantidade),
+        count(s.pedidos),
+        percent(s.percentualAcumulado),
+      ]),
+    }),
+  }),
+
   promocoes: spec<PromoReport>({
     report: "promotions",
     label: "Efetividade de promoções",
@@ -159,6 +194,103 @@ export const EXPORTS = {
         ["Pedidos com desconto", count(d.pedidosComDesconto), "pedidos"],
         ["Pedidos analisados", count(d.pedidosAnalisados), "pedidos"],
       ],
+    }),
+  }),
+  regiao: spec<RegionReport>({
+    report: "sales-by-region",
+    label: "Vendas por região",
+    slug: "vendas-por-uf",
+    build: (d) => ({
+      // Inclui a linha "Sem UF informada": sem ela a soma da planilha não
+      // fecharia com o faturamento do período, e quem reconcilia acharia que
+      // faltou dado.
+      columns: [
+        "UF",
+        "Faturamento (R$)",
+        "Pedidos",
+        "Ticket médio (R$)",
+        "% do período",
+      ],
+      rows: d.linhas.map((l) => [
+        l.uf,
+        money(l.faturamento),
+        count(l.pedidos),
+        money(l.ticketMedio),
+        percent(l.participacao),
+      ]),
+    }),
+  }),
+
+  cupons: spec<AttributionReport>({
+    report: "coupons-and-sources",
+    label: "Por cupom",
+    slug: "cupons",
+    build: (d) => ({
+      columns: ["Cupom", "Faturamento (R$)", "Pedidos", "% do período"],
+      rows: d.porCupom.map((c) => [
+        c.chave,
+        money(c.faturamento),
+        count(c.pedidos),
+        percent(c.participacao),
+      ]),
+    }),
+  }),
+
+  origem: spec<AttributionReport>({
+    report: "coupons-and-sources",
+    label: "Por origem e campanha",
+    slug: "origem-e-campanha",
+    build: (d) => ({
+      // Origem e campanha na MESMA planilha, com uma coluna que diz qual é
+      // qual: são duas quebras do mesmo conjunto, e dois arquivos obrigariam
+      // quem monta o relatório mensal a juntá-los à mão toda vez.
+      columns: ["Dimensão", "Valor", "Faturamento (R$)", "Pedidos", "% do período"],
+      rows: [
+        ...d.porOrigem.map((o) => [
+          "Origem",
+          o.chave,
+          money(o.faturamento),
+          count(o.pedidos),
+          percent(o.participacao),
+        ]),
+        ...d.porCampanha.map((c) => [
+          "Campanha",
+          c.chave,
+          money(c.faturamento),
+          count(c.pedidos),
+          percent(c.participacao),
+        ]),
+      ],
+    }),
+  }),
+
+  cancelados: spec<CanceledReport>({
+    report: "canceled-orders",
+    label: "Pedidos cancelados",
+    slug: "pedidos-cancelados",
+    build: (d) => ({
+      // A série temporal, não os escalares: é a forma longa que vira gráfico e
+      // tabela dinâmica na planilha. A taxa e o total do período são derivados
+      // (=SOMA / contagem), então não viram linha aqui.
+      //
+      // "Valor cancelado (R$)", nunca "Faturamento": este CSV vai acabar na
+      // mesma pasta que o de vendas, e é o cabeçalho que impede a soma errada.
+      columns: ["Período", "Pedidos cancelados", "Valor cancelado (R$)"],
+      rows: d.linhas.map((l) => [
+        l.bucket,
+        count(l.pedidos),
+        money(l.valor),
+      ]),
+    }),
+  }),
+
+  "cancelados-por-situacao": spec<CanceledReport>({
+    report: "canceled-orders",
+    label: "Por situação",
+    slug: "cancelados-por-situacao",
+    build: (d) => ({
+      columns: ["Situação", "Pedidos", "Valor cancelado (R$)"],
+      rows: d.porStatus.map((s) => [s.status, count(s.pedidos), money(s.valor)]),
     }),
   }),
 } as const satisfies Record<string, ExportSpec>;
@@ -187,7 +319,11 @@ export const PAGE_EXPORTS = {
   "/vendas/seller": ["vendas-por-seller"],
   "/clientes": ["clientes"],
   "/produtos": ["produtos"],
+  "/produtos/skus": ["skus"],
   "/promocoes": ["promocoes"],
+  "/regiao": ["regiao"],
+  "/origem": ["cupons", "origem"],
+  "/cancelados": ["cancelados", "cancelados-por-situacao"],
 } as const satisfies Record<string, ReadonlyArray<ExportKey>>;
 
 export type ExportPage = keyof typeof PAGE_EXPORTS;

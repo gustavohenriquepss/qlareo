@@ -32,6 +32,13 @@ describe('mapVtexStatus', () => {
     assert.equal(mapVtexStatus('canceled'), 'canceled')
   })
 
+  test("'cancellation-requested' -> 'canceled' (não 'paid')", () => {
+    // Cancelamento pedido e ainda não concluído no workflow. Se caísse no
+    // default `paid`, contaria como faturamento E sumiria do relatório de
+    // cancelados — os dois erros na mesma janela em que ainda dá para agir.
+    assert.equal(mapVtexStatus('cancellation-requested'), 'canceled')
+  })
+
   test("os três status de 'nunca pagou' -> 'pending'", () => {
     assert.equal(mapVtexStatus('window-to-change-payment'), 'pending')
     assert.equal(mapVtexStatus('payment-pending'), 'pending')
