@@ -322,7 +322,8 @@ export const PAGE_EXPORTS = {
   "/produtos/skus": ["skus"],
   "/vendas/regiao": ["regiao"],
   "/promocoes": ["promocoes"],
-  "/promocoes/origem": ["cupons", "origem"],
+  "/promocoes/cupons": ["cupons"],
+  "/promocoes/origem": ["origem"],
   "/cancelados": ["cancelados", "cancelados-por-situacao"],
 } as const satisfies Record<string, ReadonlyArray<ExportKey>>;
 

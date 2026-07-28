@@ -70,7 +70,8 @@ const REPORTS: ReadonlyArray<Report> = [
       // Mesma lógica do primeiro filho de Vendas: aponta para a rota do pai,
       // e existe para dar um alvo de VOLTA depois de ir a cupons e origem.
       { href: "/promocoes", label: "Descontos" },
-      { href: "/promocoes/origem", label: "Cupons e UTM" },
+      { href: "/promocoes/cupons", label: "Uso de cupons" },
+      { href: "/promocoes/origem", label: "Campanha e UTM" },
     ],
   },
   { href: "/cancelados", label: "Pedidos cancelados" },
