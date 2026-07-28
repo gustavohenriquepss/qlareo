@@ -120,7 +120,10 @@ export function SalesTrendChart<T extends TrendRow>({
   );
 
   return (
-    <div className="h-72 w-full">
+    // `aria-hidden`: o SVG do recharts não é navegável por teclado; leitor de
+    // tela pegaria os rótulos de eixo soltos. A série completa está na tabela
+    // que acompanha o gráfico em toda tela que o usa.
+    <div className="h-72 w-full" aria-hidden="true">
       <ResponsiveContainer width="100%" height="100%">
         {asBars ? (
           <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>

@@ -43,7 +43,11 @@ export function RankBarChart({ rows }: { rows: RankRow[] }) {
   const animate = !usePrefersReducedMotion();
 
   return (
-    <div className="w-full" style={{ height }}>
+    // `aria-hidden`: o SVG do recharts não é navegável por teclado e leitor de
+    // tela varreria seus nós de texto (ticks, rótulos de valor) fora de ordem.
+    // A mesma informação, exata, está na tabela que acompanha todo gráfico do
+    // app — é ela o caminho acessível, não o desenho.
+    <div className="w-full" style={{ height }} aria-hidden="true">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={rows}
