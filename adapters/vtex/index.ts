@@ -15,7 +15,7 @@
 import { type FetchOrdersOptions, type PlatformAdapter } from '../../core/adapter'
 import { type CanonicalOrder, type DateRange } from '../../core/types'
 import { type HttpClient } from './http'
-import { enrichVtexOrdersWithItems, fetchVtexOrders } from './orders'
+import { enrichVtexOrdersWithDetail, fetchVtexOrders } from './orders'
 
 export class VtexAdapter implements PlatformAdapter {
   readonly platform = 'vtex'
@@ -36,24 +36,32 @@ export class VtexAdapter implements PlatformAdapter {
     return fetchVtexOrders(this.http, range, options)
   }
 
-  /** Preenche `items`. Uma request por pedido — só chame quando o relatório pedir. */
-  enrichWithItems(
+  /**
+   * Preenche `items`, endereço e atribuição — tudo do mesmo Get Order. Uma
+   * request por pedido; só chame quando o relatório pedir.
+   */
+  enrichWithDetail(
     orders: CanonicalOrder[],
     options?: FetchOrdersOptions
   ): Promise<CanonicalOrder[]> {
-    return enrichVtexOrdersWithItems(this.http, orders, options)
+    return enrichVtexOrdersWithDetail(this.http, orders, options)
   }
 }
 
 export { type HttpClient } from './http'
-export { mapVtexItem, mapVtexOrder, mapVtexStatus } from './mapper'
+export {
+  mapVtexItem,
+  mapVtexOrder,
+  mapVtexOrderDetail,
+  mapVtexStatus,
+} from './mapper'
 export {
   DEFAULT_ENRICH_CONCURRENCY,
   LIST_ORDERS_PATH,
   MAX_PAGES,
   MAX_PER_SLICE,
   PER_PAGE,
-  enrichVtexOrdersWithItems,
+  enrichVtexOrdersWithDetail,
   fetchVtexOrders,
 } from './orders'
 export {

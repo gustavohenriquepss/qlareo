@@ -15,7 +15,11 @@
  * -----------------------------------------------------------------------------
  */
 import { type CanonicalItem, type CanonicalOrder, type CanonicalStatus } from '../../core/types'
-import { type VtexOrderItem, type VtexOrderSummary } from './raw-types'
+import {
+  type VtexOrderDetail,
+  type VtexOrderItem,
+  type VtexOrderSummary,
+} from './raw-types'
 
 /** Status VTEX que representam "nunca entrou dinheiro". */
 const PENDING_STATUSES = new Set<string>([
@@ -107,6 +111,33 @@ export function mapVtexOrder(raw: VtexOrderSummary): CanonicalOrder {
   if (raw.items !== undefined) order.items = raw.items.map(mapVtexItem)
 
   return order
+}
+
+/**
+ * Campos do DETALHE (Get Order) que não vêm na listagem: endereço e atribuição.
+ *
+ * Devolve um objeto PARCIAL para o chamador mesclar no pedido, em vez de mutar:
+ * `enrichVtexOrdersWithDetail` monta a cópia enriquecida num lugar só.
+ *
+ * Campo vazio é tratado como ausente (`|| undefined`): a VTEX manda string
+ * vazia em `coupon` quando não houve cupom, e um cupom chamado "" viraria uma
+ * linha própria no relatório, competindo com o bucket "Sem cupom".
+ */
+export function mapVtexOrderDetail(
+  detail: VtexOrderDetail
+): Partial<CanonicalOrder> {
+  const out: Partial<CanonicalOrder> = {}
+
+  const address = detail.shippingData?.address
+  if (address?.state) out.shippingState = address.state
+  if (address?.city) out.shippingCity = address.city
+
+  const mkt = detail.marketingData
+  if (mkt?.coupon) out.coupon = mkt.coupon
+  if (mkt?.utmSource) out.utmSource = mkt.utmSource
+  if (mkt?.utmCampaign) out.utmCampaign = mkt.utmCampaign
+
+  return out
 }
 
 /**

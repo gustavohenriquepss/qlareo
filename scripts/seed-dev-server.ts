@@ -42,6 +42,31 @@ const PRODUTOS = [
 ]
 
 const PAGAMENTOS = ['Cartão de crédito', 'Pix', 'Boleto', 'Vale-presente']
+
+/**
+ * UFs com PESO, não sorteio uniforme: uma loja brasileira real concentra em
+ * SP/RJ/MG, e uma distribuição plana faria o relatório de região parecer
+ * quebrado (14 barras idênticas) em vez de mostrar concentração.
+ */
+const UFS = [
+  'SP', 'SP', 'SP', 'SP', 'SP', 'SP',
+  'RJ', 'RJ', 'RJ',
+  'MG', 'MG',
+  'PR', 'RS', 'SC', 'BA', 'PE', 'GO', 'DF',
+]
+
+/**
+ * Cupom e UTM em MINORIA, que é o caso real: a maior linha dos dois relatórios
+ * costuma ser "sem cupom" / "direto". Um seed em que todo pedido tem campanha
+ * esconderia justamente o comportamento que a tela precisa acertar.
+ */
+const CUPONS = ['BEMVINDO10', 'FRETEGRATIS', 'VOLTA15', 'BLACK20']
+const ORIGENS = [
+  { source: 'google', campaigns: ['search-marca', 'shopping-perf'] },
+  { source: 'facebook', campaigns: ['remarketing', 'black-friday'] },
+  { source: 'instagram', campaigns: ['influencer-set'] },
+  { source: 'email', campaigns: ['newsletter-semanal'] },
+]
 const SELLERS = ['lojademo', 'Parceiro Norte', 'Parceiro Sul']
 const CLIENTES = Array.from({ length: 40 }, (_, i) => `cliente${i + 1}@exemplo.com`)
 
@@ -114,7 +139,7 @@ function gerarPedidos(dias: number): CanonicalOrder[] {
       }
       const rawStatus = pick(RAW[status]!)
 
-      orders.push({
+      const pedido: CanonicalOrder = {
         orderId: `${ACCOUNT}-${dia.toISOString().slice(0, 10)}-${n}`,
         createdAt: createdAt.toISOString(),
         status: status as CanonicalOrder['status'],
@@ -125,7 +150,21 @@ function gerarPedidos(dias: number): CanonicalOrder[] {
         sellerName: pick(SELLERS),
         customerEmail: pick(CLIENTES),
         items,
-      })
+      }
+
+      // Atribuição: campos OPCIONAIS mesmo no pedido enriquecido, e é isso que
+      // as telas precisam saber lidar. ~4% sem UF (digital/retirada), ~22% com
+      // cupom, ~35% com UTM — proporções de loja real, em que a maior linha dos
+      // dois relatórios é "sem cupom" e "direto".
+      if (rnd() > 0.04) pedido.shippingState = pick(UFS)
+      if (rnd() < 0.22) pedido.coupon = pick(CUPONS)
+      if (rnd() < 0.35) {
+        const origem = pick(ORIGENS)
+        pedido.utmSource = origem.source
+        pedido.utmCampaign = pick(origem.campaigns)
+      }
+
+      orders.push(pedido)
     }
   }
   return orders

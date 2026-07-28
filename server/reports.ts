@@ -15,10 +15,12 @@ import {
   type Grain,
   type SalesScope,
   canceledOrders,
+  couponsAndSources,
   filterByScope,
   newVsReturning,
   promoEffectiveness,
   salesByPeriod,
+  salesByRegion,
   topProductsABC,
   topSkus,
 } from '../core'
@@ -31,6 +33,8 @@ export type ReportName =
   | 'top-skus'
   | 'promotions'
   | 'canceled-orders'
+  | 'sales-by-region'
+  | 'coupons-and-sources'
 
 export interface ReportRequest {
   report: ReportName
@@ -39,14 +43,29 @@ export interface ReportRequest {
   grain: Grain
 }
 
-const ITEM_REPORTS: ReportName[] = ['top-products', 'top-skus', 'promotions']
+/**
+ * Relatórios que exigem o pedido ENRIQUECIDO (o Get Order da VTEX).
+ *
+ * Região e atribuição entram aqui mesmo não usando `items`: os campos deles vêm
+ * do MESMO payload, então `items_synced` é o sinal correto para os cinco. É por
+ * isso que a migration 002 rebaixa esse booleano — o detalhe antigo foi buscado
+ * por um código que não lia UF nem cupom, e listar esses pedidos como
+ * sincronizados reportaria a lacuna como se fosse dado.
+ */
+const DETAIL_REPORTS: ReportName[] = [
+  'top-products',
+  'top-skus',
+  'promotions',
+  'sales-by-region',
+  'coupons-and-sources',
+]
 
 export async function runReport(
   store: OrderStore,
   storeAccount: string,
   req: ReportRequest
 ): Promise<unknown> {
-  const withItems = ITEM_REPORTS.includes(req.report)
+  const withItems = DETAIL_REPORTS.includes(req.report)
   const orders = await store.getOrders({ storeAccount, range: req.range, withItems })
 
   // EXCEÇÃO DELIBERADA à regra "todo relatório passa por filterByScope".
@@ -72,14 +91,20 @@ export async function runReport(
     return newVsReturning(scoped)
   }
 
-  // Relatórios de item: se há pedidos mas nenhum com detalhe, o período ainda
-  // não foi sincronizado com itens — diga isso em vez de devolver zeros.
+  // Relatórios de detalhe: se há pedidos mas nenhum com detalhe, o período ainda
+  // não foi sincronizado — diga isso em vez de devolver zeros.
+  //
+  // O teste é a presença de `items`, e vale também para região e atribuição: os
+  // três blocos vêm do mesmo Get Order, então "nenhum item" implica "nenhuma UF
+  // e nenhum cupom". O contrário NÃO vale, e é por isso que o teste não pode ser
+  // "nenhuma UF": pedido digital não tem endereço e compra sem cupom é o caso
+  // comum — ausência desses campos é resultado, não lacuna.
   if (scoped.length > 0 && !scoped.some((o) => o.items && o.items.length > 0)) {
     return {
       itensNaoSincronizados: true,
       totalPedidos: scoped.length,
       mensagem:
-        'Os pedidos deste período ainda não têm detalhe de item sincronizado. ' +
+        'Os pedidos deste período ainda não têm detalhe sincronizado. ' +
         'Rode o sync com itens (npm run sync -- --items) para este intervalo.',
     }
   }
@@ -89,6 +114,12 @@ export async function runReport(
   }
   if (req.report === 'top-skus') {
     return { skus: topSkus(scoped), totalPedidos: scoped.length }
+  }
+  if (req.report === 'sales-by-region') {
+    return salesByRegion(scoped)
+  }
+  if (req.report === 'coupons-and-sources') {
+    return couponsAndSources(scoped)
   }
   return { ...promoEffectiveness(scoped), pedidosAnalisados: scoped.length }
 }

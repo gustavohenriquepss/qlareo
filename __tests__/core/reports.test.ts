@@ -12,9 +12,11 @@ import assert from 'node:assert/strict'
 import { type CanonicalItem, type CanonicalOrder } from '../../core/types'
 import {
   canceledOrders,
+  couponsAndSources,
   newVsReturning,
   promoEffectiveness,
   salesByPeriod,
+  salesByRegion,
   topProductsABC,
   topSkus,
 } from '../../core/reports'
@@ -627,3 +629,118 @@ describe('canceledOrders', () => {
   })
 })
 
+// ============================================================================
+// 6. salesByRegion
+// ============================================================================
+
+describe('salesByRegion', () => {
+  const orders: CanonicalOrder[] = [
+    makeOrder({ orderId: 'a', totalMinor: 60000, shippingState: 'SP' }),
+    makeOrder({ orderId: 'b', totalMinor: 20000, shippingState: 'SP' }),
+    makeOrder({ orderId: 'c', totalMinor: 10000, shippingState: 'RJ' }),
+    // Pedido digital: legitimamente sem UF. NÃO é falta de sincronismo.
+    makeOrder({ orderId: 'd', totalMinor: 10000 }),
+  ]
+
+  const report = salesByRegion(orders)
+
+  test('agrupa por UF, ordenado por faturamento desc', () => {
+    assert.deepEqual(report.linhas.map((l) => l.uf), [
+      'SP',
+      'RJ',
+      'Sem UF informada',
+    ])
+    assert.equal(report.linhas[0].faturamento, 800) // 60000 + 20000
+    assert.equal(report.linhas[0].pedidos, 2)
+  })
+
+  test('pedido sem UF vira LINHA, não é descartado', () => {
+    // Descartar faria a soma das linhas não bater com o faturamento do período,
+    // e dois números que não reconciliam custam a confiança nos dois.
+    const soma = report.linhas.reduce((s, l) => s + l.faturamento, 0)
+    assert.equal(soma, report.totalFaturamento)
+    assert.equal(report.totalFaturamento, 1000)
+    assert.equal(report.pedidosSemRegiao, 1)
+  })
+
+  test('participação e ticket médio por UF', () => {
+    const sp = report.linhas.find((l) => l.uf === 'SP')!
+    assert.equal(sp.participacao, 80) // 800 de 1000
+    assert.equal(sp.ticketMedio, 400) // 800 / 2
+  })
+
+  test('conjunto vazio não divide por zero', () => {
+    const empty = salesByRegion([])
+    assert.deepEqual(empty.linhas, [])
+    assert.equal(empty.totalFaturamento, 0)
+    assert.equal(empty.pedidosSemRegiao, 0)
+  })
+})
+
+// ============================================================================
+// 7. couponsAndSources
+// ============================================================================
+
+describe('couponsAndSources', () => {
+  const orders: CanonicalOrder[] = [
+    makeOrder({
+      orderId: 'a',
+      totalMinor: 30000,
+      coupon: 'BEMVINDO10',
+      utmSource: 'google',
+      utmCampaign: 'black-friday',
+    }),
+    makeOrder({
+      orderId: 'b',
+      totalMinor: 10000,
+      coupon: 'BEMVINDO10',
+      utmSource: 'google',
+      utmCampaign: 'black-friday',
+    }),
+    // Sem cupom e sem UTM: o caso MAIS COMUM numa loja real.
+    makeOrder({ orderId: 'c', totalMinor: 60000 }),
+  ]
+
+  const report = couponsAndSources(orders)
+
+  test('"Sem cupom" é uma LINHA, e costuma ser a maior', () => {
+    // Omiti-la faria a segunda maior linha parecer dominante.
+    assert.deepEqual(report.porCupom, [
+      { chave: 'Sem cupom', faturamento: 600, pedidos: 1, participacao: 60 },
+      { chave: 'BEMVINDO10', faturamento: 400, pedidos: 2, participacao: 40 },
+    ])
+  })
+
+  test('separa quem usou cupom do faturamento total', () => {
+    assert.equal(report.pedidosComCupom, 2)
+    assert.equal(report.faturamentoComCupom, 400)
+    assert.equal(report.totalFaturamento, 1000)
+    assert.equal(report.totalPedidos, 3)
+  })
+
+  test('pedido sem UTM cai em "Direto / não rastreado", não some', () => {
+    const direto = report.porOrigem.find(
+      (o) => o.chave === 'Direto / não rastreado'
+    )!
+    assert.equal(direto.faturamento, 600)
+    const soma = report.porOrigem.reduce((s, o) => s + o.faturamento, 0)
+    assert.equal(soma, report.totalFaturamento)
+  })
+
+  test('agrupa por campanha separado da origem', () => {
+    const bf = report.porCampanha.find((c) => c.chave === 'black-friday')!
+    assert.equal(bf.pedidos, 2)
+    assert.equal(bf.faturamento, 400)
+  })
+
+  test('observacao declara que a atribuição é de último clique', () => {
+    assert.ok(report.observacao.includes('último clique'))
+  })
+
+  test('conjunto vazio não divide por zero', () => {
+    const empty = couponsAndSources([])
+    assert.deepEqual(empty.porCupom, [])
+    assert.equal(empty.totalFaturamento, 0)
+    assert.equal(empty.pedidosComCupom, 0)
+  })
+})

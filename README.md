@@ -12,6 +12,8 @@ respondem "como foi a venda":
 | **Top produtos + Curva ABC** | Quais produtos concentram a receita, com classe A/B/C |
 | **SKUs vendidos** | A mesma curva por VARIAÇÃO: qual tamanho encalha e qual vive em ruptura |
 | **Efetividade de promoções** | Quanto de receita andou com desconto e quanto o desconto custou |
+| **Vendas por região** | Para qual UF a loja vende, com ticket médio e participação |
+| **Cupons e origem** | Qual cupom e qual campanha geraram receita — o "por quê" das promoções |
 | **Pedidos cancelados** | Taxa de cancelamento, valor que não entrou, e por qual situação e pagamento |
 
 > **Relação com o app VTEX IO.** Existe também uma versão deste produto como
@@ -183,6 +185,8 @@ GET /api/reports/top-products?from&to&scope
 GET /api/reports/top-skus?from&to&scope
 GET /api/reports/promotions?from&to&scope
 GET /api/reports/canceled-orders?from&to&grain
+GET /api/reports/sales-by-region?from&to&scope
+GET /api/reports/coupons-and-sources?from&to&scope
 ```
 
 `scope` ∈ `bruto` | `liquido` | `todos`. Todas as rotas (menos `/health`) exigem
@@ -207,6 +211,8 @@ recortes de vendas como sub-rotas:
 | `/clientes` | Novos vs. recorrentes e taxa de recompra |
 | `/produtos`, `/produtos/skus` | Curva ABC por produto e por SKU |
 | `/promocoes` | Receita com desconto e custo do desconto |
+| `/regiao` | Faturamento por UF de entrega, com ticket médio e participação |
+| `/origem` | Faturamento por cupom, origem (utm_source) e campanha |
 | `/cancelados` | Taxa de cancelamento, valor cancelado, por situação e pagamento |
 
 Três decisões que explicam a maior parte do código:

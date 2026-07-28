@@ -110,6 +110,42 @@ export interface CanceledReport {
   porPagamento: Array<{ metodo: string; pedidos: number; valor: number }>;
 }
 
+/** GET /api/reports/sales-by-region */
+export interface RegionRow {
+  uf: string;
+  faturamento: number;
+  pedidos: number;
+  ticketMedio: number;
+  participacao: number;
+}
+
+export interface RegionReport {
+  linhas: RegionRow[];
+  totalFaturamento: number;
+  totalPedidos: number;
+  /** Pedido digital ou retirada legitimamente não tem UF — não é lacuna. */
+  pedidosSemRegiao: number;
+}
+
+/** GET /api/reports/coupons-and-sources */
+export interface AttributionRow {
+  chave: string;
+  faturamento: number;
+  pedidos: number;
+  participacao: number;
+}
+
+export interface AttributionReport {
+  porCupom: AttributionRow[];
+  porOrigem: AttributionRow[];
+  porCampanha: AttributionRow[];
+  totalFaturamento: number;
+  totalPedidos: number;
+  pedidosComCupom: number;
+  faturamentoComCupom: number;
+  observacao: string;
+}
+
 /**
  * Resposta alternativa dos relatórios de item quando o período tem pedidos mas
  * nenhum com detalhe sincronizado. O servidor devolve isto em vez de zeros —

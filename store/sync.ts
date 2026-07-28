@@ -6,8 +6,10 @@
  * consulta e a janela de ~24 meses deixam de limitar os relatórios: o custo de
  * puxar da API é pago no sync, não a cada leitura.
  *
- * Enriquecimento (itens) é opcional e caro: normalmente roda num passo separado
- * ou só para o período que os relatórios de produto/promoção vão cobrir.
+ * Enriquecimento é opcional e caro — uma request por pedido. Traz de uma vez os
+ * itens, o endereço de entrega e a atribuição (cupom, UTM), porque na VTEX os
+ * três vêm do mesmo Get Order. Normalmente roda num passo separado, ou só para
+ * o período que os relatórios de detalhe vão cobrir.
  * -----------------------------------------------------------------------------
  */
 import { type DateRange, type PlatformAdapter } from '../core'
@@ -39,7 +41,7 @@ export async function syncOrders(
   options: SyncOptions = {}
 ): Promise<SyncResult> {
   const base = await adapter.fetchOrders(range)
-  const orders = options.enrichItems ? await adapter.enrichWithItems(base) : base
+  const orders = options.enrichItems ? await adapter.enrichWithDetail(base) : base
 
   await store.upsertOrders(storeAccount, orders)
 

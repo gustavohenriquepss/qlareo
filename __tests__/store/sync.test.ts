@@ -26,7 +26,7 @@ function fakeAdapter(orders: CanonicalOrder[]) {
       calls.fetch++
       return orders.map((o) => ({ ...o }))
     },
-    async enrichWithItems(os) {
+    async enrichWithDetail(os) {
       calls.enrich++
       return os.map((o) => ({ ...o, items: ITEMS.map((i) => ({ ...i })) }))
     },

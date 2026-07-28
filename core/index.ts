@@ -34,14 +34,20 @@ export { DEFAULT_TIMEZONE, type Grain, bucketKey, dayKeyInTz, isoWeek } from './
 
 // Os relatórios
 export {
+  type AttributionReport,
+  type AttributionRow,
   type CanceledReport,
   type CanceledRow,
   type ProductRow,
+  type RegionReport,
+  type RegionRow,
   type SkuRow,
   canceledOrders,
+  couponsAndSources,
   newVsReturning,
   promoEffectiveness,
   salesByPeriod,
+  salesByRegion,
   topProductsABC,
   topSkus,
 } from './reports'

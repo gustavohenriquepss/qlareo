@@ -12,6 +12,8 @@ const REPORTS: ReportName[] = [
   'top-skus',
   'promotions',
   'canceled-orders',
+  'sales-by-region',
+  'coupons-and-sources',
 ]
 const SCOPES: SalesScope[] = ['bruto', 'liquido', 'todos']
 const GRAINS: Grain[] = ['day', 'week', 'month']

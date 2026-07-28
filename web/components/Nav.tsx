@@ -63,6 +63,8 @@ const REPORTS: ReadonlyArray<Report> = [
     ],
   },
   { href: "/promocoes", label: "Promoções" },
+  { href: "/regiao", label: "Vendas por região" },
+  { href: "/origem", label: "Cupons e origem" },
   { href: "/cancelados", label: "Pedidos cancelados" },
 ];
 

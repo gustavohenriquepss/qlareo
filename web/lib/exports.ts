@@ -22,8 +22,10 @@
 import { count, money, percent, type Sheet } from "./csv";
 import type { Filters } from "./filters";
 import type {
+  AttributionReport,
   CanceledReport,
   ProductsReport,
+  RegionReport,
   PromoReport,
   RetentionReport,
   SalesReport,
@@ -194,6 +196,74 @@ export const EXPORTS = {
       ],
     }),
   }),
+  regiao: spec<RegionReport>({
+    report: "sales-by-region",
+    label: "Vendas por região",
+    slug: "vendas-por-uf",
+    build: (d) => ({
+      // Inclui a linha "Sem UF informada": sem ela a soma da planilha não
+      // fecharia com o faturamento do período, e quem reconcilia acharia que
+      // faltou dado.
+      columns: [
+        "UF",
+        "Faturamento (R$)",
+        "Pedidos",
+        "Ticket médio (R$)",
+        "% do período",
+      ],
+      rows: d.linhas.map((l) => [
+        l.uf,
+        money(l.faturamento),
+        count(l.pedidos),
+        money(l.ticketMedio),
+        percent(l.participacao),
+      ]),
+    }),
+  }),
+
+  cupons: spec<AttributionReport>({
+    report: "coupons-and-sources",
+    label: "Por cupom",
+    slug: "cupons",
+    build: (d) => ({
+      columns: ["Cupom", "Faturamento (R$)", "Pedidos", "% do período"],
+      rows: d.porCupom.map((c) => [
+        c.chave,
+        money(c.faturamento),
+        count(c.pedidos),
+        percent(c.participacao),
+      ]),
+    }),
+  }),
+
+  origem: spec<AttributionReport>({
+    report: "coupons-and-sources",
+    label: "Por origem e campanha",
+    slug: "origem-e-campanha",
+    build: (d) => ({
+      // Origem e campanha na MESMA planilha, com uma coluna que diz qual é
+      // qual: são duas quebras do mesmo conjunto, e dois arquivos obrigariam
+      // quem monta o relatório mensal a juntá-los à mão toda vez.
+      columns: ["Dimensão", "Valor", "Faturamento (R$)", "Pedidos", "% do período"],
+      rows: [
+        ...d.porOrigem.map((o) => [
+          "Origem",
+          o.chave,
+          money(o.faturamento),
+          count(o.pedidos),
+          percent(o.participacao),
+        ]),
+        ...d.porCampanha.map((c) => [
+          "Campanha",
+          c.chave,
+          money(c.faturamento),
+          count(c.pedidos),
+          percent(c.participacao),
+        ]),
+      ],
+    }),
+  }),
+
   cancelados: spec<CanceledReport>({
     report: "canceled-orders",
     label: "Pedidos cancelados",
@@ -251,6 +321,8 @@ export const PAGE_EXPORTS = {
   "/produtos": ["produtos"],
   "/produtos/skus": ["skus"],
   "/promocoes": ["promocoes"],
+  "/regiao": ["regiao"],
+  "/origem": ["cupons", "origem"],
   "/cancelados": ["cancelados", "cancelados-por-situacao"],
 } as const satisfies Record<string, ReadonlyArray<ExportKey>>;
 

@@ -510,6 +510,162 @@ export function canceledOrders(
 }
 
 // ============================================================================
+// 6. Vendas por região (UF)   |   7. Cupons e origem (UTM)
+//    Os dois precisam do pedido ENRIQUECIDO — os campos vêm do Get Order.
+// ============================================================================
+
+/** Rótulo do que não tem UF informada. */
+const SEM_REGIAO = 'Sem UF informada'
+/** Rótulo de quem comprou sem cupom. NÃO é ausência de dado — é um resultado. */
+const SEM_CUPOM = 'Sem cupom'
+/** Rótulo de quem chegou sem UTM: tráfego direto, orgânico ou não rastreado. */
+const SEM_ORIGEM = 'Direto / não rastreado'
+
+export interface RegionRow {
+  uf: string
+  faturamento: number
+  pedidos: number
+  ticketMedio: number
+  /** Fatia do faturamento do período, em %. */
+  participacao: number
+}
+
+export interface RegionReport {
+  linhas: RegionRow[]
+  totalFaturamento: number
+  totalPedidos: number
+  /**
+   * Quantos pedidos do conjunto NÃO têm UF. Fica separado do total para que a
+   * tela possa dizer "sobre 940 de 1.000 pedidos" em vez de fingir cobertura
+   * completa — pedido digital e retirada em loja legitimamente não têm UF.
+   */
+  pedidosSemRegiao: number
+}
+
+/**
+ * Faturamento por UF de entrega.
+ *
+ * Agrupa pelo que veio do endereço de ENTREGA, não de cobrança: a pergunta é
+ * "para onde estou vendendo" (frete, estoque, campanha regional), e num presente
+ * as duas respostas divergem.
+ *
+ * Pedido sem UF entra numa linha própria em vez de ser descartado — descartar
+ * faria a soma das linhas não bater com o faturamento do período, e o lojista
+ * perderia a confiança nos dois números.
+ */
+export function salesByRegion(
+  ordersWithDetail: CanonicalOrder[]
+): RegionReport {
+  // Sem `grain` nem `timezone`: o agrupamento é geográfico, e a janela de datas
+  // já foi aplicada na consulta ao store.
+  const currency = currencyOf(ordersWithDetail)
+
+  const ufs = new Map<string, Acc>()
+  let totalMinor = 0
+  let semRegiao = 0
+
+  for (const o of ordersWithDetail) {
+    totalMinor += o.totalMinor
+    if (!o.shippingState) semRegiao++
+    bump(ufs, o.shippingState ?? SEM_REGIAO, o.totalMinor)
+  }
+
+  return {
+    linhas: sortedRows(ufs, currency).map(({ key, faturamento, pedidos }) => ({
+      uf: key,
+      faturamento,
+      pedidos,
+      ticketMedio: pedidos ? round(faturamento / pedidos) : 0,
+      participacao: round(
+        totalMinor ? (faturamento / toMajor(totalMinor, currency)) * 100 : 0
+      ),
+    })),
+    totalFaturamento: toMajor(totalMinor, currency),
+    totalPedidos: ordersWithDetail.length,
+    pedidosSemRegiao: semRegiao,
+  }
+}
+
+export interface AttributionRow {
+  chave: string
+  faturamento: number
+  pedidos: number
+  participacao: number
+}
+
+export interface AttributionReport {
+  porCupom: AttributionRow[]
+  porOrigem: AttributionRow[]
+  porCampanha: AttributionRow[]
+  totalFaturamento: number
+  totalPedidos: number
+  /** Pedidos que usaram algum cupom. */
+  pedidosComCupom: number
+  /** Faturamento que passou por cupom. */
+  faturamentoComCupom: number
+  observacao: string
+}
+
+/**
+ * Cupons e origem de tráfego.
+ *
+ * Complementa `promoEffectiveness`, que sabe QUANTO de desconto foi dado mas não
+ * POR QUÊ: aqui o desconto ganha um nome (o cupom) e uma origem (a campanha).
+ *
+ * "Sem cupom" e "Direto / não rastreado" são LINHAS, não buracos. É a diferença
+ * que define a leitura do relatório: numa loja saudável a maior linha costuma
+ * ser justamente "sem cupom", e omiti-la faria a segunda maior parecer dominante.
+ * Também é o que impede o erro de ler ausência de UTM como falha de sincronismo
+ * — a maioria dos pedidos legitimamente não tem UTM nenhuma.
+ */
+export function couponsAndSources(
+  ordersWithDetail: CanonicalOrder[]
+): AttributionReport {
+  const currency = currencyOf(ordersWithDetail)
+
+  const cupons = new Map<string, Acc>()
+  const origens = new Map<string, Acc>()
+  const campanhas = new Map<string, Acc>()
+
+  let totalMinor = 0
+  let comCupomMinor = 0
+  let pedidosComCupom = 0
+
+  for (const o of ordersWithDetail) {
+    totalMinor += o.totalMinor
+    if (o.coupon) {
+      pedidosComCupom++
+      comCupomMinor += o.totalMinor
+    }
+    bump(cupons, o.coupon ?? SEM_CUPOM, o.totalMinor)
+    bump(origens, o.utmSource ?? SEM_ORIGEM, o.totalMinor)
+    bump(campanhas, o.utmCampaign ?? SEM_ORIGEM, o.totalMinor)
+  }
+
+  const totalMajor = toMajor(totalMinor, currency)
+  const linhas = (m: Map<string, Acc>): AttributionRow[] =>
+    sortedRows(m, currency).map(({ key, faturamento, pedidos }) => ({
+      chave: key,
+      faturamento,
+      pedidos,
+      participacao: round(totalMajor ? (faturamento / totalMajor) * 100 : 0),
+    }))
+
+  return {
+    porCupom: linhas(cupons),
+    porOrigem: linhas(origens),
+    porCampanha: linhas(campanhas),
+    totalFaturamento: totalMajor,
+    totalPedidos: ordersWithDetail.length,
+    pedidosComCupom,
+    faturamentoComCupom: toMajor(comCupomMinor, currency),
+    observacao:
+      'Atribuição por último clique, como a VTEX registra no pedido. Um pedido ' +
+      'tem no máximo um cupom e uma campanha — não há rateio entre origens.',
+  }
+}
+
+// ============================================================================
 // Helpers internos
 // ============================================================================
 

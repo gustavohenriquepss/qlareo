@@ -27,6 +27,11 @@ interface OrderRow extends SqlRow {
   payment_method: string | null
   seller_name: string | null
   customer_email: string | null
+  shipping_state: string | null
+  shipping_city: string | null
+  coupon: string | null
+  utm_source: string | null
+  utm_campaign: string | null
 }
 
 /** Linha da tabela `order_items`, como o driver a devolve. */
@@ -72,9 +77,11 @@ export class PostgresOrderStore implements OrderStore {
           `INSERT INTO orders (
              store_account, order_id, created_at, status, raw_status,
              total_minor, currency, payment_method, seller_name, customer_email,
+             shipping_state, shipping_city, coupon, utm_source, utm_campaign,
              items_synced
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                   $15, $16)
            ON CONFLICT (store_account, order_id) DO UPDATE SET
              created_at     = EXCLUDED.created_at,
              status         = EXCLUDED.status,
@@ -84,6 +91,16 @@ export class PostgresOrderStore implements OrderStore {
              payment_method = EXCLUDED.payment_method,
              seller_name    = EXCLUDED.seller_name,
              customer_email = EXCLUDED.customer_email,
+             -- COALESCE, e não EXCLUDED direto: os campos de atribuição só
+             -- existem no pedido ENRIQUECIDO. Um sync sem --items traz o
+             -- cabeçalho com esses campos vazios, e sobrescrever apagaria a UF
+             -- e o cupom que um sync anterior já tinha buscado. Mesma lógica do
+             -- items_synced logo abaixo: enriquecimento não regride.
+             shipping_state = COALESCE(EXCLUDED.shipping_state, orders.shipping_state),
+             shipping_city  = COALESCE(EXCLUDED.shipping_city,  orders.shipping_city),
+             coupon         = COALESCE(EXCLUDED.coupon,         orders.coupon),
+             utm_source     = COALESCE(EXCLUDED.utm_source,     orders.utm_source),
+             utm_campaign   = COALESCE(EXCLUDED.utm_campaign,   orders.utm_campaign),
              items_synced   = orders.items_synced OR EXCLUDED.items_synced,
              synced_at      = now()`,
           [
@@ -97,6 +114,11 @@ export class PostgresOrderStore implements OrderStore {
             order.paymentMethod ?? null,
             order.sellerName ?? null,
             order.customerEmail ?? null,
+            order.shippingState ?? null,
+            order.shippingCity ?? null,
+            order.coupon ?? null,
+            order.utmSource ?? null,
+            order.utmCampaign ?? null,
             hasItems,
           ]
         )
@@ -141,7 +163,8 @@ export class PostgresOrderStore implements OrderStore {
 
     const res = await this.db.query<OrderRow>(
       `SELECT order_id, created_at, status, raw_status, total_minor, currency,
-              payment_method, seller_name, customer_email
+              payment_method, seller_name, customer_email,
+              shipping_state, shipping_city, coupon, utm_source, utm_campaign
          FROM orders
         WHERE store_account = $1
           AND created_at >= $2
@@ -220,6 +243,11 @@ export class PostgresOrderStore implements OrderStore {
     if (row.payment_method !== null) order.paymentMethod = row.payment_method
     if (row.seller_name !== null) order.sellerName = row.seller_name
     if (row.customer_email !== null) order.customerEmail = row.customer_email
+    if (row.shipping_state !== null) order.shippingState = row.shipping_state
+    if (row.shipping_city !== null) order.shippingCity = row.shipping_city
+    if (row.coupon !== null) order.coupon = row.coupon
+    if (row.utm_source !== null) order.utmSource = row.utm_source
+    if (row.utm_campaign !== null) order.utmCampaign = row.utm_campaign
     return order
   }
 

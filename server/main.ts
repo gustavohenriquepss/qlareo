@@ -11,6 +11,8 @@
  *   GET /api/reports/top-skus?from&to&scope
  *   GET /api/reports/promotions?from&to&scope
  *   GET /api/reports/canceled-orders?from&to&grain   (ignora `scope` — ver reports.ts)
+ *   GET /api/reports/sales-by-region?from&to&scope
+ *   GET /api/reports/coupons-and-sources?from&to&scope
  *   GET /health
  * -----------------------------------------------------------------------------
  */
