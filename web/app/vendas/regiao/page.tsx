@@ -101,16 +101,18 @@ export default async function RegiaoPage({
         <StatTile
           label="UFs com venda"
           value={formatInt(comUf.length)}
-          context={`${formatInt(d.totalPedidos)} pedidos no período`}
+          context={`${formatInt(d.totalPedidos)} pedidos`}
           emphasis
         />
         <StatTile
           label="Maior praça"
-          value={lider ? lider.uf : "—"}
-          context={
+          value={
             lider
-              ? `${formatMoney(lider.faturamento)} — ${formatPercent(lider.participacao)} do período`
-              : "Nenhum pedido com UF informada"
+              ? `${lider.uf} (${formatPercent(lider.participacao)})`
+              : "—"
+          }
+          context={
+            lider ? formatMoney(lider.faturamento) : "Nenhum pedido com UF informada"
           }
         />
         <StatTile

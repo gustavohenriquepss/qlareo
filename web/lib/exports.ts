@@ -286,7 +286,7 @@ export const EXPORTS = {
 
   "cancelados-lista": spec<CanceledReport>({
     report: "canceled-orders",
-    label: "Lista de pedidos cancelados",
+    label: "Pedidos Cancelados",
     slug: "pedidos-cancelados",
     build: (d) => ({
       // A lista pedido a pedido — a granularidade que a série por período agrega
