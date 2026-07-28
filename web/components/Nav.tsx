@@ -52,7 +52,16 @@ const REPORTS: ReadonlyArray<Report> = [
     ],
   },
   { href: "/clientes", label: "Novos vs. recorrentes" },
-  { href: "/produtos", label: "Top produtos + ABC" },
+  {
+    href: "/produtos",
+    label: "Produtos",
+    children: [
+      // Mesma lógica do primeiro filho de Vendas: aponta para a rota do pai,
+      // e existe para dar um alvo de VOLTA depois de ir aos SKUs.
+      { href: "/produtos", label: "Top produtos + ABC" },
+      { href: "/produtos/skus", label: "SKUs vendidos" },
+    ],
+  },
   { href: "/promocoes", label: "Promoções" },
 ];
 

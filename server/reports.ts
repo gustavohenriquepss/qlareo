@@ -19,6 +19,7 @@ import {
   promoEffectiveness,
   salesByPeriod,
   topProductsABC,
+  topSkus,
 } from '../core'
 import { type OrderStore } from '../store/orderStore'
 
@@ -26,6 +27,7 @@ export type ReportName =
   | 'sales-by-period'
   | 'new-vs-returning'
   | 'top-products'
+  | 'top-skus'
   | 'promotions'
 
 export interface ReportRequest {
@@ -35,7 +37,7 @@ export interface ReportRequest {
   grain: Grain
 }
 
-const ITEM_REPORTS: ReportName[] = ['top-products', 'promotions']
+const ITEM_REPORTS: ReportName[] = ['top-products', 'top-skus', 'promotions']
 
 export async function runReport(
   store: OrderStore,
@@ -67,6 +69,9 @@ export async function runReport(
 
   if (req.report === 'top-products') {
     return { produtos: topProductsABC(scoped), totalPedidos: scoped.length }
+  }
+  if (req.report === 'top-skus') {
+    return { skus: topSkus(scoped), totalPedidos: scoped.length }
   }
   return { ...promoEffectiveness(scoped), pedidosAnalisados: scoped.length }
 }

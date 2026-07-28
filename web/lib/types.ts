@@ -38,19 +38,41 @@ export interface RetentionReport {
   aviso: string;
 }
 
-/** GET /api/reports/top-products */
-export interface ProductRow {
-  productId: string;
+export type AbcClass = "A" | "B" | "C";
+
+/**
+ * O que as linhas dos dois rankings de item têm em comum — a chave fica em cada
+ * tipo concreto. Espelha `RankedRow` de `core/reports.ts`, e é o que o
+ * `AbcChart` exige para desenhar qualquer um dos dois.
+ */
+export interface RankedRow {
   nome: string;
   receita: number;
   quantidade: number;
   pedidos: number;
-  classe: "A" | "B" | "C";
+  classe: AbcClass;
   percentualAcumulado: number;
+}
+
+/** GET /api/reports/top-products */
+export interface ProductRow extends RankedRow {
+  productId: string;
 }
 
 export interface ProductsReport {
   produtos: ProductRow[];
+  totalPedidos: number;
+}
+
+/** GET /api/reports/top-skus */
+export interface SkuRow extends RankedRow {
+  skuId: string;
+  /** A qual produto a variação pertence — a chave de junção com o ERP. */
+  productId: string;
+}
+
+export interface SkusReport {
+  skus: SkuRow[];
   totalPedidos: number;
 }
 

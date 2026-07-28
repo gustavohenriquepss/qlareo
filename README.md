@@ -2,14 +2,15 @@
 
 Relatórios de vendas simples e confiáveis para lojistas **VTEX**, como
 **aplicação standalone** — um serviço próprio que consulta a Orders API da loja,
-guarda os pedidos em Postgres e entrega, numa interface web, os quatro
-relatórios que respondem "como foi a venda":
+guarda os pedidos em Postgres e entrega, numa interface web, os relatórios que
+respondem "como foi a venda":
 
 | Relatório | Responde |
 |---|---|
 | **Vendas por período** | Faturamento, pedidos e ticket médio por dia/semana/mês; por pagamento e por seller |
 | **Novos vs. recorrentes** | Clientes de primeira compra vs. repetidos e taxa de recompra |
 | **Top produtos + Curva ABC** | Quais produtos concentram a receita, com classe A/B/C |
+| **SKUs vendidos** | A mesma curva por VARIAÇÃO: qual tamanho encalha e qual vive em ruptura |
 | **Efetividade de promoções** | Quanto de receita andou com desconto e quanto o desconto custou |
 
 > **Relação com o app VTEX IO.** Existe também uma versão deste produto como
@@ -49,7 +50,7 @@ qlareo/
 ├── core/              # ── AGNÓSTICO DE PLATAFORMA ──
 │   ├── types.ts       # modelo canônico de pedido (a fronteira)
 │   ├── adapter.ts     # interface PlatformAdapter (a porta)
-│   ├── reports.ts     # os 4 relatórios
+│   ├── reports.ts     # os relatórios
 │   └── scope|money|time.ts
 ├── adapters/vtex/     # ── ESPECÍFICO DA VTEX ──
 │   ├── mapper.ts      # formato cru da OMS → canônico
@@ -110,6 +111,16 @@ npm run sync -- --from=2026-01-01 --to=2026-01-31 --items   # VTEX → banco
 npm start                 # API em http://localhost:3000
 ```
 
+> **A migration `002_order_attribution` exige um re-sync.** Ela adiciona UF,
+> cidade, cupom e UTM — campos que vêm do mesmo Get Order dos itens — e, por
+> isso, **rebaixa `items_synced` de todo pedido já sincronizado**. O detalhe
+> desses pedidos foi buscado por um código que ainda não lia esses campos;
+> mantê-los marcados como sincronizados faria os relatórios reportarem a lacuna
+> como se fosse dado ("100% sem região"). Até rodar `npm run sync -- --items` de
+> novo, os cinco relatórios de detalhe (produtos, SKUs, promoções, região,
+> origem) respondem "não sincronizado" em vez de números — que é a resposta
+> correta, não a mais agradável.
+
 ```bash
 # ── front-end (web/), noutro terminal ──
 cd web
@@ -168,11 +179,19 @@ GET /health
 GET /api/reports/sales-by-period?from=ISO&to=ISO&scope=liquido&grain=day
 GET /api/reports/new-vs-returning?from&to&scope
 GET /api/reports/top-products?from&to&scope
+GET /api/reports/top-skus?from&to&scope
 GET /api/reports/promotions?from&to&scope
 ```
 
 `scope` ∈ `bruto` | `liquido` | `todos`. Todas as rotas (menos `/health`) exigem
 o header `x-api-key` quando `QLAREO_API_KEY` está definido.
+
+**`canceled-orders` ignora `scope`**, e é a única rota que faz isso. O recorte
+existe para tirar cancelados do faturamento; aplicá-lo a um relatório *sobre*
+cancelados devolveria vazio sempre. Além disso a taxa de cancelamento precisa do
+total de pedidos do período como denominador, que um conjunto já filtrado não
+tem como informar. A interface esconde o controle de Recorte nessa tela, para
+não oferecer um filtro que a rota não obedece.
 
 ## Interface (`web/`)
 
@@ -184,7 +203,7 @@ recortes de vendas como sub-rotas:
 | `/vendas` | Faturamento, pedidos e ticket médio por dia/semana/mês |
 | `/vendas/pagamento`, `/vendas/seller` | os mesmos números, quebrados por meio de pagamento e por seller |
 | `/clientes` | Novos vs. recorrentes e taxa de recompra |
-| `/produtos` | Top produtos e curva ABC |
+| `/produtos`, `/produtos/skus` | Curva ABC por produto e por SKU |
 | `/promocoes` | Receita com desconto e custo do desconto |
 
 Três decisões que explicam a maior parte do código:

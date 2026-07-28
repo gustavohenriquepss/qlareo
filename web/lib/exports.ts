@@ -26,6 +26,7 @@ import type {
   PromoReport,
   RetentionReport,
   SalesReport,
+  SkusReport,
 } from "./types";
 
 export interface ExportSpec {
@@ -142,6 +143,37 @@ export const EXPORTS = {
     }),
   }),
 
+  skus: spec<SkusReport>({
+    report: "top-skus",
+    label: "SKUs e curva ABC",
+    slug: "skus-abc",
+    build: (d) => ({
+      // As DUAS chaves, e nesta ordem: o `skuId` é a linha, o `productId` é o
+      // que permite um PROCV agrupando as variações de volta em produto. Levar
+      // só uma delas obrigaria quem monta a planilha a voltar aqui.
+      columns: [
+        "Classe",
+        "SKU",
+        "ID do SKU",
+        "ID do produto",
+        "Receita (R$)",
+        "Quantidade",
+        "Pedidos",
+        "% acumulado",
+      ],
+      rows: d.skus.map((s) => [
+        s.classe,
+        s.nome,
+        s.skuId,
+        s.productId,
+        money(s.receita),
+        count(s.quantidade),
+        count(s.pedidos),
+        percent(s.percentualAcumulado),
+      ]),
+    }),
+  }),
+
   promocoes: spec<PromoReport>({
     report: "promotions",
     label: "Efetividade de promoções",
@@ -187,6 +219,7 @@ export const PAGE_EXPORTS = {
   "/vendas/seller": ["vendas-por-seller"],
   "/clientes": ["clientes"],
   "/produtos": ["produtos"],
+  "/produtos/skus": ["skus"],
   "/promocoes": ["promocoes"],
 } as const satisfies Record<string, ReadonlyArray<ExportKey>>;
 

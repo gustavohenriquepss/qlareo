@@ -9,6 +9,7 @@ const REPORTS: ReportName[] = [
   'sales-by-period',
   'new-vs-returning',
   'top-products',
+  'top-skus',
   'promotions',
 ]
 const SCOPES: SalesScope[] = ['bruto', 'liquido', 'todos']

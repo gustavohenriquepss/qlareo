@@ -2,12 +2,13 @@
  * main.ts — servidor HTTP standalone do QLAREO.
  * -----------------------------------------------------------------------------
  * `http` nativo do Node, sem framework — coerente com a postura do projeto de
- * dependência mínima. Expõe os 4 relatórios em GET /api/reports/:report,
+ * dependência mínima. Expõe os relatórios em GET /api/reports/:report,
  * protegidos por uma api key própria, consultando a VTEX via appKey/appToken.
  *
  *   GET /api/reports/sales-by-period?from=ISO&to=ISO&scope=liquido&grain=day
  *   GET /api/reports/new-vs-returning?from&to&scope
  *   GET /api/reports/top-products?from&to&scope
+ *   GET /api/reports/top-skus?from&to&scope
  *   GET /api/reports/promotions?from&to&scope
  *   GET /health
  * -----------------------------------------------------------------------------

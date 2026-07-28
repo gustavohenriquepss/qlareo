@@ -1,7 +1,7 @@
 /**
  * core/reports.ts
  * -----------------------------------------------------------------------------
- * Os 4 relatórios, agora agregando sobre o MODELO CANÔNICO (`core/types.ts`).
+ * Os relatórios, agregando sobre o MODELO CANÔNICO (`core/types.ts`).
  * Nada aqui conhece VTEX: o adapter da plataforma traduz para `CanonicalOrder`
  * e estas funções são as mesmas para qualquer origem de dados.
  *
@@ -13,11 +13,13 @@
  *   const clientes = newVsReturning(scoped)
  *   // relatórios com item precisam dos pedidos enriquecidos (o.items preenchido):
  *   const abc     = topProductsABC(withItems)
+ *   const skus    = topSkus(withItems)
  *   const promo   = promoEffectiveness(withItems)
  *
  * Decisões travadas:
- *   - Agrupar produto por `productId` (não `skuId`): P e M do mesmo produto
- *     contam numa linha só.
+ *   - `topProductsABC` agrupa por `productId` (não `skuId`): P e M do mesmo
+ *     produto contam numa linha só. Quem precisa da variação usa `topSkus`, que
+ *     é o MESMO cálculo com outra chave (ver `rankItemsByRevenue`).
  *   - DINHEIRO: soma-se SEMPRE em unidade mínima INTEIRA dentro dos laços e
  *     converte-se com `toMajor()` só ao montar a saída. Converter dentro do laço
  *     (o que o código legado fazia) acumula erro de float.
@@ -27,7 +29,7 @@
  * front (`react/utils/api.ts`) já consome.
  * -----------------------------------------------------------------------------
  */
-import { type CanonicalOrder } from './types'
+import { type CanonicalItem, type CanonicalOrder } from './types'
 import { type Grain, bucketKey, DEFAULT_TIMEZONE } from './time'
 import { toMajor, round } from './money'
 
@@ -105,11 +107,15 @@ export function salesByPeriod(
 }
 
 // ============================================================================
-// 2. Top produtos + Curva ABC  (precisa de `o.items` preenchido)
+// 2. Top produtos e top SKUs + Curva ABC  (precisam de `o.items` preenchido)
 // ============================================================================
 
-export interface ProductRow {
-  productId: string
+/**
+ * O que as duas linhas de ranking têm em comum. A CHAVE não está aqui: é o
+ * único campo que difere entre agrupar por produto e agrupar por SKU, e é ela
+ * que dá nome ao tipo de cada relatório.
+ */
+interface RankedRow {
   nome: string
   receita: number       // unidade maior (reais)
   quantidade: number
@@ -118,30 +124,78 @@ export interface ProductRow {
   percentualAcumulado: number
 }
 
+export interface ProductRow extends RankedRow {
+  productId: string
+}
+
 /**
- * ABC por RECEITA. Ordena produtos por faturamento, acumula, e corta:
- * A até 80%, B até 95%, C o resto. Agrupa por `productId`.
- *
- * O percentual acumulado é calculado sobre os INTEIROS em unidade mínima, então
- * não depende de arredondamento intermediário.
+ * Uma linha por VARIAÇÃO (tamanho/cor). Carrega `productId` além do `skuId`
+ * porque a pergunta seguinte a "qual SKU vendeu" é sempre "de qual produto ele
+ * é" — e, na planilha, é o `productId` que cruza com o ERP.
  */
-export function topProductsABC(ordersWithItems: CanonicalOrder[]): ProductRow[] {
+export interface SkuRow extends RankedRow {
+  skuId: string
+  productId: string
+}
+
+/**
+ * Ranking de itens por receita com curva ABC — o miolo que `topProductsABC` e
+ * `topSkus` compartilham.
+ *
+ * Só a CHAVE de agrupamento muda entre os dois. A agregação, a ordenação e o
+ * corte A/B/C são idênticos, e duplicá-los deixaria os dois relatórios livres
+ * para divergir num arredondamento — dois números que não reconciliam custam a
+ * confiança do lojista nos dois.
+ *
+ * ABC por RECEITA: ordena por faturamento, acumula, corta em A até 80%, B até
+ * 95%, C o resto. O percentual acumulado sai dos INTEIROS em unidade mínima,
+ * então não depende de arredondamento intermediário.
+ *
+ * `amostra` é o primeiro item visto do grupo — de onde o chamador tira o que
+ * não está na chave (o `productId` quando a chave é o SKU).
+ *
+ * O NOME não sai da amostra: sai de `nomeDoGrupo`, que recebe todos os nomes
+ * distintos do grupo. Agrupar por SKU dá um nome só, mas agrupar por produto
+ * junta itens que têm nomes DIFERENTES (um por variação), e escolher "o
+ * primeiro que apareceu" é escolher uma variação ao acaso — ver `nomeDoProduto`.
+ */
+function rankItemsByRevenue(
+  ordersWithItems: CanonicalOrder[],
+  keyOf: (item: CanonicalItem) => string,
+  nomeDoGrupo: (nomes: string[]) => string = (nomes) => nomes[0] ?? ''
+): Array<{ chave: string; amostra: CanonicalItem; row: RankedRow }> {
   const currency = currencyOf(ordersWithItems)
 
   const agg = new Map<
     string,
-    { nome: string; receitaMinor: number; qtd: number; pedidos: Set<string> }
+    {
+      amostra: CanonicalItem
+      // Set: nomes distintos, na ordem em que apareceram. A ordem importa —
+      // é o fallback de `nomeDoProduto` quando não há prefixo comum.
+      nomes: Set<string>
+      receitaMinor: number
+      qtd: number
+      pedidos: Set<string>
+    }
   >()
 
   for (const o of ordersWithItems) {
     for (const item of o.items ?? []) {
+      const chave = keyOf(item)
       const cur =
-        agg.get(item.productId) ??
-        { nome: item.name, receitaMinor: 0, qtd: 0, pedidos: new Set<string>() }
+        agg.get(chave) ??
+        {
+          amostra: item,
+          nomes: new Set<string>(),
+          receitaMinor: 0,
+          qtd: 0,
+          pedidos: new Set<string>(),
+        }
+      cur.nomes.add(item.name)
       cur.receitaMinor += item.unitPaidMinor * item.quantity
       cur.qtd += item.quantity
       cur.pedidos.add(o.orderId)
-      agg.set(item.productId, cur)
+      agg.set(chave, cur)
     }
   }
 
@@ -151,19 +205,107 @@ export function topProductsABC(ordersWithItems: CanonicalOrder[]): ProductRow[] 
   const totalMinor = ordered.reduce((s, [, v]) => s + v.receitaMinor, 0)
 
   let acumuladoMinor = 0
-  return ordered.map(([productId, v]) => {
+  return ordered.map(([chave, v]) => {
     acumuladoMinor += v.receitaMinor
     const pct = totalMinor ? (acumuladoMinor / totalMinor) * 100 : 0
     return {
-      productId,
-      nome: v.nome,
-      receita: toMajor(v.receitaMinor, currency),
-      quantidade: v.qtd,
-      pedidos: v.pedidos.size,
-      classe: (pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C') as 'A' | 'B' | 'C',
-      percentualAcumulado: round(pct),
+      chave,
+      amostra: v.amostra,
+      row: {
+        nome: nomeDoGrupo([...v.nomes]),
+        receita: toMajor(v.receitaMinor, currency),
+        quantidade: v.qtd,
+        pedidos: v.pedidos.size,
+        classe: (pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C') as 'A' | 'B' | 'C',
+        percentualAcumulado: round(pct),
+      },
     }
   })
+}
+
+/**
+ * Sobras de separador na ponta do prefixo comum: "Camiseta Dry Fit -" vira
+ * "Camiseta Dry Fit". Só a PONTA — separador no meio do nome é nome.
+ */
+const SEPARADOR_FINAL = /[\s\-–—:;,/|+]+$/
+
+/**
+ * Nome de exibição de um PRODUTO a partir dos nomes das variações dele.
+ *
+ * O modelo canônico não tem nome de produto: `CanonicalItem.name` vem do
+ * `items[].name` do Get Order da VTEX, que é o nome do SKU e JÁ INCLUI a
+ * variação ("Tênis Runner Pro - 40"). Agrupando por `productId`, pegar o nome
+ * do primeiro item do grupo rotula o produto inteiro com uma variação
+ * arbitrária — a que por acaso apareceu primeiro no período consultado, o que
+ * faz o rótulo MUDAR quando o filtro de data muda.
+ *
+ * Então derivamos: prefixo comum às variações, cortado em fronteira de PALAVRA.
+ * A fronteira de palavra é o que impede o caso patológico do prefixo por
+ * caractere — "... - 40" e "... - 41" compartilham o "4" e produziriam
+ * "Tênis Runner Pro - 4".
+ *
+ * É heurística, e o fallback é deliberado nos dois extremos:
+ *  - UMA variação só: devolve o nome inteiro. Com um SKU não dá para saber o
+ *    que ali é variação, e chutar um corte estragaria o caso mais comum do
+ *    lojista pequeno.
+ *  - SEM prefixo comum (variação vem na frente, ou catálogo sem padrão):
+ *    devolve o primeiro nome. Rótulo imperfeito é melhor que linha sem rótulo.
+ *
+ * Substituir isto por um nome de produto de verdade é possível: o Get Order traz
+ * `itemMetadata.Items[]` com `Name` (produto) e `SkuName` (variação), correlato
+ * por `Id`/`ProductId`. Não está implementado porque esse bloco vem vazio em
+ * parte das contas/pedidos, e não dá para afirmar que ele serve sem ver o
+ * payload de uma conta real. Quando vier: `CanonicalItem` ganha um
+ * `productName?`, o adapter preenche, e aqui é só preferi-lo — esta função
+ * continua sendo o fallback de quem não tiver o campo.
+ */
+function nomeDoProduto(nomes: string[]): string {
+  const primeiro = nomes[0] ?? ''
+  if (nomes.length < 2) return primeiro
+
+  let comum = primeiro.split(/\s+/)
+  for (const nome of nomes.slice(1)) {
+    const tokens = nome.split(/\s+/)
+    let i = 0
+    while (i < comum.length && i < tokens.length && comum[i] === tokens[i]) i++
+    comum = comum.slice(0, i)
+    if (comum.length === 0) break
+  }
+
+  return comum.join(' ').replace(SEPARADOR_FINAL, '') || primeiro
+}
+
+/**
+ * Ranking por PRODUTO: P e M do mesmo produto contam numa linha só. É a visão
+ * de sortimento — o que comprar, o que descontinuar.
+ *
+ * Só o RÓTULO passa por `nomeDoProduto`; a agregação e o corte ABC são os
+ * mesmos de `topSkus`, calculados em `rankItemsByRevenue`.
+ */
+export function topProductsABC(ordersWithItems: CanonicalOrder[]): ProductRow[] {
+  return rankItemsByRevenue(
+    ordersWithItems,
+    (item) => item.productId,
+    nomeDoProduto
+  ).map(({ chave, row }) => ({ productId: chave, ...row }))
+}
+
+/**
+ * Ranking por SKU: cada variação numa linha. É a visão de ESTOQUE — um produto
+ * classe A pode esconder um tamanho encalhado e outro que vive em ruptura, e o
+ * relatório de produto, por construção, soma os dois numa linha e apaga a
+ * diferença.
+ *
+ * O nome vem do item da VTEX, que já descreve a variação ("Camiseta Preta - M").
+ */
+export function topSkus(ordersWithItems: CanonicalOrder[]): SkuRow[] {
+  return rankItemsByRevenue(ordersWithItems, (item) => item.skuId).map(
+    ({ chave, amostra, row }) => ({
+      skuId: chave,
+      productId: amostra.productId,
+      ...row,
+    })
+  )
 }
 
 // ============================================================================

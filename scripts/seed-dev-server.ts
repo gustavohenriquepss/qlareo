@@ -19,17 +19,26 @@ import { type CanonicalOrder } from '../core'
 
 const ACCOUNT = 'lojademo'
 
+/**
+ * Cada produto tem VARIAÇÕES, e o número delas varia de propósito: é o que faz
+ * `/produtos` e `/produtos/skus` mostrarem coisas diferentes. Com um sku por
+ * produto (como era antes), as duas telas sairiam idênticas e nenhuma das duas
+ * estaria sendo testada de verdade.
+ *
+ * Produto de variação única (boné, garrafa) existe no meio de propósito: é o
+ * caso em que as duas telas DEVEM coincidir.
+ */
 const PRODUTOS = [
-  { productId: 'p1', name: 'Tênis Runner Pro', preco: 49900 },
-  { productId: 'p2', name: 'Camiseta Dry Fit', preco: 8900 },
-  { productId: 'p3', name: 'Jaqueta Corta-Vento', preco: 32900 },
-  { productId: 'p4', name: 'Meia Esportiva (par)', preco: 2900 },
-  { productId: 'p5', name: 'Boné Trail', preco: 7900 },
-  { productId: 'p6', name: 'Mochila 20L', preco: 19900 },
-  { productId: 'p7', name: 'Garrafa Térmica 700ml', preco: 12900 },
-  { productId: 'p8', name: 'Short de Corrida', preco: 10900 },
-  { productId: 'p9', name: 'Óculos Solar Sport', preco: 25900 },
-  { productId: 'p10', name: 'Faixa de Cabeça', preco: 1900 },
+  { productId: 'p1', name: 'Tênis Runner Pro', preco: 49900, variacoes: ['38', '39', '40', '41', '42'] },
+  { productId: 'p2', name: 'Camiseta Dry Fit', preco: 8900, variacoes: ['P', 'M', 'G', 'GG'] },
+  { productId: 'p3', name: 'Jaqueta Corta-Vento', preco: 32900, variacoes: ['P', 'M', 'G'] },
+  { productId: 'p4', name: 'Meia Esportiva (par)', preco: 2900, variacoes: ['35-38', '39-42', '43-46'] },
+  { productId: 'p5', name: 'Boné Trail', preco: 7900, variacoes: ['único'] },
+  { productId: 'p6', name: 'Mochila 20L', preco: 19900, variacoes: ['Preta', 'Azul'] },
+  { productId: 'p7', name: 'Garrafa Térmica 700ml', preco: 12900, variacoes: ['única'] },
+  { productId: 'p8', name: 'Short de Corrida', preco: 10900, variacoes: ['P', 'M', 'G'] },
+  { productId: 'p9', name: 'Óculos Solar Sport', preco: 25900, variacoes: ['Fumê', 'Espelhado'] },
+  { productId: 'p10', name: 'Faixa de Cabeça', preco: 1900, variacoes: ['única'] },
 ]
 
 const PAGAMENTOS = ['Cartão de crédito', 'Pix', 'Boleto', 'Vale-presente']
@@ -64,6 +73,7 @@ function gerarPedidos(dias: number): CanonicalOrder[] {
       const nItens = Math.floor(rnd() * 3) + 1
       const items = Array.from({ length: nItens }, () => {
         const p = pick(PRODUTOS)
+        const variacao = pick(p.variacoes)
         const quantity = Math.floor(rnd() * 2) + 1
         // ~35% dos itens com desconto
         const temDesconto = rnd() < 0.35
@@ -71,9 +81,12 @@ function gerarPedidos(dias: number): CanonicalOrder[] {
           ? Math.round(p.preco * (1 - (0.1 + rnd() * 0.3)))
           : p.preco
         return {
-          skuId: `${p.productId}-u`,
+          skuId: `${p.productId}-${variacao}`,
           productId: p.productId,
-          name: p.name,
+          // O nome do item na VTEX já descreve a variação, e é dele que a tela
+          // de SKUs tira o rótulo — sem isso, cinco tamanhos de tênis viram
+          // cinco linhas com o mesmo texto.
+          name: p.variacoes.length > 1 ? `${p.name} - ${variacao}` : p.name,
           quantity,
           unitPaidMinor,
           unitListMinor: p.preco,

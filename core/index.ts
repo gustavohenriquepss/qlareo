@@ -32,10 +32,13 @@ export { filterByScope } from './scope'
 export { decimalsFor, parseDecimalToMinor, round, toMajor } from './money'
 export { DEFAULT_TIMEZONE, type Grain, bucketKey, dayKeyInTz, isoWeek } from './time'
 
-// Os quatro relatórios
+// Os relatórios
 export {
+  type ProductRow,
+  type SkuRow,
   newVsReturning,
   promoEffectiveness,
   salesByPeriod,
   topProductsABC,
+  topSkus,
 } from './reports'

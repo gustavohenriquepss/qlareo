@@ -15,6 +15,7 @@ import {
   promoEffectiveness,
   salesByPeriod,
   topProductsABC,
+  topSkus,
 } from '../../core/reports'
 
 function makeOrder(
@@ -158,53 +159,62 @@ describe('salesByPeriod', () => {
 // 2. topProductsABC
 // ============================================================================
 
-describe('topProductsABC', () => {
-  // Receita total: R$ 1.000
-  //   prod-camiseta: R$ 800 (80%)      -> classe A (em DOIS skus: tamanhos P e M)
-  //   prod-calca:    R$ 150 (95% acum) -> classe B
-  //   prod-meia:     R$ 50  (100% acum)-> classe C
-  const orders: CanonicalOrder[] = [
-    makeOrder({
-      orderId: 'o1',
-      items: [
-        makeItem({
-          skuId: 'sku-camiseta-P',
-          productId: 'prod-camiseta',
-          name: 'Camiseta Básica',
-          unitPaidMinor: 40000, // R$ 400
-          quantity: 1,
-        }),
-        makeItem({
-          skuId: 'sku-calca-42',
-          productId: 'prod-calca',
-          name: 'Calça Jeans',
-          unitPaidMinor: 7500, // R$ 75
-          quantity: 2, // R$ 150
-        }),
-      ],
-    }),
-    makeOrder({
-      orderId: 'o2',
-      items: [
-        makeItem({
-          skuId: 'sku-camiseta-M', // sku DIFERENTE, MESMO productId
-          productId: 'prod-camiseta',
-          name: 'Camiseta Básica',
-          unitPaidMinor: 40000, // R$ 400
-          quantity: 1,
-        }),
-        makeItem({
-          skuId: 'sku-meia-unica',
-          productId: 'prod-meia',
-          name: 'Meia Esportiva',
-          unitPaidMinor: 2500, // R$ 25
-          quantity: 2, // R$ 50
-        }),
-      ],
-    }),
-  ]
+// Receita total: R$ 1.000. Por PRODUTO:
+//   prod-camiseta: R$ 800 (80%)      -> classe A (em DOIS skus: tamanhos P e M)
+//   prod-calca:    R$ 150 (95% acum) -> classe B
+//   prod-meia:     R$ 50  (100% acum)-> classe C
+//
+// A mesma massa serve aos dois rankings de propósito: é ela que mostra o que
+// `topSkus` enxerga e `topProductsABC` não (a camiseta é UMA linha classe A por
+// produto, mas DUAS variações de R$ 400 cada por SKU).
+//
+// Os nomes dos dois skus de camiseta são DIFERENTES entre si, como na VTEX: o
+// `items[].name` do Get Order é o nome do SKU e carrega a variação junto. Isso
+// não é detalhe do fixture — é o que faz o rótulo do produto ser derivado em vez
+// de copiado de um item ao acaso.
+const itemOrders: CanonicalOrder[] = [
+  makeOrder({
+    orderId: 'o1',
+    items: [
+      makeItem({
+        skuId: 'sku-camiseta-P',
+        productId: 'prod-camiseta',
+        name: 'Camiseta Básica - P',
+        unitPaidMinor: 40000, // R$ 400
+        quantity: 1,
+      }),
+      makeItem({
+        skuId: 'sku-calca-42',
+        productId: 'prod-calca',
+        name: 'Calça Jeans',
+        unitPaidMinor: 7500, // R$ 75
+        quantity: 2, // R$ 150
+      }),
+    ],
+  }),
+  makeOrder({
+    orderId: 'o2',
+    items: [
+      makeItem({
+        skuId: 'sku-camiseta-M', // sku DIFERENTE, MESMO productId
+        productId: 'prod-camiseta',
+        name: 'Camiseta Básica - M',
+        unitPaidMinor: 40000, // R$ 400
+        quantity: 1,
+      }),
+      makeItem({
+        skuId: 'sku-meia-unica',
+        productId: 'prod-meia',
+        name: 'Meia Esportiva',
+        unitPaidMinor: 2500, // R$ 25
+        quantity: 2, // R$ 50
+      }),
+    ],
+  }),
+]
 
-  const rows = topProductsABC(orders)
+describe('topProductsABC', () => {
+  const rows = topProductsABC(itemOrders)
 
   test('agrega dois skus (P e M) do MESMO productId numa linha só', () => {
     assert.equal(rows.length, 3)
@@ -212,6 +222,7 @@ describe('topProductsABC', () => {
     assert.equal(camiseta.receita, 800) // (40000*1 + 40000*1) / 100
     assert.equal(camiseta.quantidade, 2)
     assert.equal(camiseta.pedidos, 2) // apareceu em o1 e o2
+    // rótulo do PRODUTO, não o de uma das variações ("- P" / "- M")
     assert.equal(camiseta.nome, 'Camiseta Básica')
   })
 
@@ -251,6 +262,137 @@ describe('topProductsABC', () => {
 
   test('sem pedidos retorna []', () => {
     assert.deepEqual(topProductsABC([]), [])
+  })
+})
+
+// ============================================================================
+// 2a. topProductsABC — o RÓTULO do produto
+// ============================================================================
+
+describe('topProductsABC: nome do produto derivado das variações', () => {
+  /** Um produto, N variações com os nomes dados. Devolve o rótulo da linha. */
+  function rotuloDe(...nomes: string[]): string {
+    const orders = nomes.map((name, i) =>
+      makeOrder({
+        orderId: `o${i}`,
+        items: [makeItem({ skuId: `sku-${i}`, productId: 'prod-x', name })],
+      })
+    )
+    return topProductsABC(orders)[0]!.nome
+  }
+
+  test('corta a variação em fronteira de PALAVRA, não de caractere', () => {
+    // O caso que quebra prefixo comum por caractere: "40" e "41" compartilham
+    // o "4", e o rótulo sairia "Tênis Runner Pro - 4".
+    assert.equal(
+      rotuloDe('Tênis Runner Pro - 40', 'Tênis Runner Pro - 41'),
+      'Tênis Runner Pro'
+    )
+  })
+
+  test('separador sobrando na ponta é removido; no meio do nome, preservado', () => {
+    assert.equal(rotuloDe('Meia 35-38', 'Meia 39-42'), 'Meia')
+    assert.equal(
+      rotuloDe('Camiseta Dry-Fit P', 'Camiseta Dry-Fit G'),
+      'Camiseta Dry-Fit'
+    )
+  })
+
+  test('variação sem separador (cor no fim do nome) também é cortada', () => {
+    assert.equal(rotuloDe('Mochila 20L Preta', 'Mochila 20L Azul'), 'Mochila 20L')
+  })
+
+  test('UMA variação só: nome inteiro, sem chute de corte', () => {
+    // Com um sku não dá para saber o que ali é variação — e este é o caso mais
+    // comum do lojista pequeno.
+    assert.equal(rotuloDe('Boné Trail - único'), 'Boné Trail - único')
+  })
+
+  test('variações com nome idêntico devolvem esse nome', () => {
+    assert.equal(rotuloDe('Garrafa Térmica 700ml', 'Garrafa Térmica 700ml'),
+      'Garrafa Térmica 700ml')
+  })
+
+  test('sem prefixo comum (variação na frente): cai no primeiro nome', () => {
+    assert.equal(rotuloDe('P - Camiseta', 'M - Camiseta'), 'P - Camiseta')
+  })
+
+  test('o rótulo não depende de qual variação apareceu primeiro', () => {
+    // É a regressão que importa: com o nome vindo do primeiro item visto, mudar
+    // o filtro de data mudava o rótulo do produto na tela.
+    const direto = rotuloDe('Jaqueta Corta-Vento - P', 'Jaqueta Corta-Vento - G')
+    const invertido = rotuloDe('Jaqueta Corta-Vento - G', 'Jaqueta Corta-Vento - P')
+    assert.equal(direto, 'Jaqueta Corta-Vento')
+    assert.equal(invertido, direto)
+  })
+
+  test('derivar o rótulo não mexe na matemática ABC', () => {
+    const rows = topProductsABC(itemOrders)
+    assert.deepEqual(rows.map((r) => r.receita), [800, 150, 50])
+    assert.deepEqual(rows.map((r) => r.percentualAcumulado), [80, 95, 100])
+    assert.deepEqual(rows.map((r) => r.classe), ['A', 'B', 'C'])
+  })
+})
+
+// ============================================================================
+// 2b. topSkus — o MESMO cálculo, chaveado por variação
+// ============================================================================
+
+describe('topSkus', () => {
+  // Sobre `itemOrders`, agora por SKU:
+  //   sku-camiseta-P: R$ 400 (40% acum)  -> A
+  //   sku-camiseta-M: R$ 400 (80% acum)  -> A
+  //   sku-calca-42:   R$ 150 (95% acum)  -> B
+  //   sku-meia-unica: R$ 50  (100% acum) -> C
+  const rows = topSkus(itemOrders)
+
+  test('SEPARA o que topProductsABC agrega: P e M viram duas linhas', () => {
+    assert.equal(rows.length, 4)
+    assert.equal(topProductsABC(itemOrders).length, 3)
+
+    const p = rows.find((r) => r.skuId === 'sku-camiseta-P')!
+    const m = rows.find((r) => r.skuId === 'sku-camiseta-M')!
+    assert.equal(p.receita, 400)
+    assert.equal(m.receita, 400)
+    assert.equal(p.pedidos, 1) // só em o1
+    assert.equal(m.pedidos, 1) // só em o2
+  })
+
+  test('cada linha carrega o productId da variação', () => {
+    const p = rows.find((r) => r.skuId === 'sku-camiseta-P')!
+    const m = rows.find((r) => r.skuId === 'sku-camiseta-M')!
+    assert.equal(p.productId, 'prod-camiseta')
+    assert.equal(m.productId, 'prod-camiseta')
+  })
+
+  test('o nome do SKU mantém a variação — é o que distingue as linhas', () => {
+    // O corte que `topProductsABC` faz no rótulo NÃO acontece aqui: sem o
+    // "- P" / "- M", as duas linhas sairiam com o mesmo texto.
+    const p = rows.find((r) => r.skuId === 'sku-camiseta-P')!
+    const m = rows.find((r) => r.skuId === 'sku-camiseta-M')!
+    assert.equal(p.nome, 'Camiseta Básica - P')
+    assert.equal(m.nome, 'Camiseta Básica - M')
+  })
+
+  test('ABC é recalculada sobre a base de SKU, não herdada do produto', () => {
+    // A camiseta é UMA linha classe A por produto (80% sozinha). Por SKU ela
+    // vira duas de 40%, e o corte de 80% passa a incluir as duas — é uma
+    // classificação diferente, não um recorte da anterior.
+    assert.deepEqual(rows.map((r) => r.percentualAcumulado), [40, 80, 95, 100])
+    assert.deepEqual(rows.map((r) => r.classe), ['A', 'A', 'B', 'C'])
+  })
+
+  test('a receita total bate com a do ranking por produto', () => {
+    // Mesma massa, mesma soma: se os dois divergirem, um dos dois está errado.
+    const porSku = rows.reduce((s, r) => s + r.receita, 0)
+    const porProduto = topProductsABC(itemOrders).reduce((s, r) => s + r.receita, 0)
+    assert.equal(porSku, porProduto)
+    assert.equal(porSku, 1000)
+  })
+
+  test('pedido sem items é ignorado; sem pedidos retorna []', () => {
+    assert.deepEqual(topSkus([makeOrder({ orderId: 'sem-itens' })]), [])
+    assert.deepEqual(topSkus([]), [])
   })
 })
 
@@ -387,3 +529,4 @@ describe('promoEffectiveness', () => {
     assert.equal(empty.percentualDescontoMedio, 0)
   })
 })
+
