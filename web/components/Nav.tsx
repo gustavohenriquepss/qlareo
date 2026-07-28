@@ -49,6 +49,7 @@ const REPORTS: ReadonlyArray<Report> = [
       { href: "/vendas", label: "Período" },
       { href: "/vendas/pagamento", label: "Meio de pagamento" },
       { href: "/vendas/seller", label: "Seller" },
+      { href: "/vendas/regiao", label: "Regiões" },
     ],
   },
   { href: "/clientes", label: "Novos vs. recorrentes" },
@@ -62,9 +63,16 @@ const REPORTS: ReadonlyArray<Report> = [
       { href: "/produtos/skus", label: "SKUs vendidos" },
     ],
   },
-  { href: "/promocoes", label: "Promoções" },
-  { href: "/regiao", label: "Vendas por região" },
-  { href: "/origem", label: "Cupons e origem" },
+  {
+    href: "/promocoes",
+    label: "Promoções",
+    children: [
+      // Mesma lógica do primeiro filho de Vendas: aponta para a rota do pai,
+      // e existe para dar um alvo de VOLTA depois de ir a cupons e origem.
+      { href: "/promocoes", label: "Descontos" },
+      { href: "/promocoes/origem", label: "Cupons e UTM" },
+    ],
+  },
   { href: "/cancelados", label: "Pedidos cancelados" },
 ];
 

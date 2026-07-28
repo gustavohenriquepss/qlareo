@@ -107,7 +107,7 @@ export default async function OrigemPage({
 
   return (
     <div className="space-y-4">
-      <ExportBar page="/origem" filters={filters} />
+      <ExportBar page="/promocoes/origem" filters={filters} />
 
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatTile
