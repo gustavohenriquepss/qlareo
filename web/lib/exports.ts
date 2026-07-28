@@ -266,8 +266,8 @@ export const EXPORTS = {
 
   cancelados: spec<CanceledReport>({
     report: "canceled-orders",
-    label: "Pedidos cancelados",
-    slug: "pedidos-cancelados",
+    label: "Cancelamentos por período",
+    slug: "cancelamentos-por-periodo",
     build: (d) => ({
       // A série temporal, não os escalares: é a forma longa que vira gráfico e
       // tabela dinâmica na planilha. A taxa e o total do período são derivados
@@ -280,6 +280,24 @@ export const EXPORTS = {
         l.bucket,
         count(l.pedidos),
         money(l.valor),
+      ]),
+    }),
+  }),
+
+  "cancelados-lista": spec<CanceledReport>({
+    report: "canceled-orders",
+    label: "Lista de pedidos cancelados",
+    slug: "pedidos-cancelados",
+    build: (d) => ({
+      // A lista pedido a pedido — a granularidade que a série por período agrega
+      // e que cruza com o ERP na hora de conferir cada cancelamento. Data em ISO
+      // pela mesma razão do resto do arquivo: ordena certo na planilha.
+      columns: ["Pedido", "Data", "Valor cancelado (R$)", "Pagamento"],
+      rows: d.pedidos.map((p) => [
+        p.pedido,
+        p.data,
+        money(p.valor),
+        p.pagamento,
       ]),
     }),
   }),
@@ -314,7 +332,7 @@ export const PAGE_EXPORTS = {
   "/promocoes": ["promocoes"],
   "/promocoes/cupons": ["cupons"],
   "/promocoes/origem": ["origem"],
-  "/cancelados": ["cancelados"],
+  "/cancelados": ["cancelados-lista", "cancelados"],
 } as const satisfies Record<string, ReadonlyArray<ExportKey>>;
 
 export type ExportPage = keyof typeof PAGE_EXPORTS;

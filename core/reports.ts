@@ -420,6 +420,20 @@ export interface CanceledRow {
   valor: number    // unidade maior (reais)
 }
 
+/**
+ * Uma linha por pedido cancelado — a lista detalhada por trás dos agregados.
+ *
+ * Diferente de `porPagamento`, TODO pedido cancelado aparece aqui, inclusive o
+ * que não tem meio de pagamento informado (`SEM_PAGAMENTO`): a lista é a fonte
+ * conferível de onde os totais saem, e omitir uma linha faria a soma não bater.
+ */
+export interface CanceledOrderRow {
+  pedido: string   // orderId
+  data: string     // 'YYYY-MM-DD', truncada no fuso do relatório
+  valor: number    // unidade maior (reais)
+  pagamento: string
+}
+
 export interface CanceledReport {
   /** Quantos pedidos cancelados no período. */
   totalPedidos: number
@@ -436,7 +450,12 @@ export interface CanceledReport {
   linhas: CanceledRow[]
   /** Um meio de pagamento concentrando cancelamento é problema de gateway. */
   porPagamento: Array<{ metodo: string; pedidos: number; valor: number }>
+  /** A lista pedido a pedido, mais recente primeiro. É o que cruza com o ERP. */
+  pedidos: CanceledOrderRow[]
 }
+
+/** Rótulo do pedido cancelado sem meio de pagamento informado. */
+const SEM_PAGAMENTO = '—'
 
 /**
  * Cancelamentos do período: quanto, quando, de que tipo e por qual pagamento.
@@ -504,6 +523,16 @@ export function canceledOrders(
       metodo: key,
       ...rest,
     })),
+    // Mais recente primeiro: numa lista de cancelamento é o pedido de ontem que
+    // ainda dá para agir. `createdAt` é ISO UTC, então ordena como string.
+    pedidos: [...cancelados]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((o) => ({
+        pedido: o.orderId,
+        data: bucketKey(o.createdAt, 'day', timezone),
+        valor: toMajor(o.totalMinor, currency),
+        pagamento: o.paymentMethod ?? SEM_PAGAMENTO,
+      })),
   }
 }
 

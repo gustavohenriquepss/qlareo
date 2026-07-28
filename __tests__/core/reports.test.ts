@@ -608,6 +608,38 @@ describe('canceledOrders', () => {
     ])
   })
 
+  test('lista cada pedido cancelado — a fonte conferível dos totais', () => {
+    // Só canc1 entrou; canc2 está em curso e é excluído também da lista.
+    assert.deepEqual(report.pedidos, [
+      { pedido: 'canc1', data: '2026-01-15', valor: 200, pagamento: 'Boleto' },
+    ])
+  })
+
+  test('ordena a lista por data desc e rotula pedido sem pagamento', () => {
+    const r = canceledOrders([
+      makeOrder({
+        orderId: 'antigo',
+        status: 'canceled',
+        rawStatus: 'canceled',
+        totalMinor: 10000,
+        createdAt: '2026-01-10T12:00:00Z',
+        paymentMethod: 'Pix',
+      }),
+      makeOrder({
+        orderId: 'recente-sem-pgto',
+        status: 'canceled',
+        rawStatus: 'canceled',
+        totalMinor: 5000,
+        createdAt: '2026-01-20T12:00:00Z',
+        // sem paymentMethod: entra na lista mesmo assim, com rótulo '—'
+      }),
+    ])
+    assert.deepEqual(r.pedidos, [
+      { pedido: 'recente-sem-pgto', data: '2026-01-20', valor: 50, pagamento: '—' },
+      { pedido: 'antigo', data: '2026-01-10', valor: 100, pagamento: 'Pix' },
+    ])
+  })
+
   test('período sem nenhum cancelamento: zeros, sem divisão por zero', () => {
     const limpo = canceledOrders([
       makeOrder({ orderId: 'ok', totalMinor: 10000 }),
@@ -617,6 +649,7 @@ describe('canceledOrders', () => {
     assert.equal(limpo.taxa, 0)
     assert.equal(limpo.pedidosNoPeriodo, 1)
     assert.deepEqual(limpo.linhas, [])
+    assert.deepEqual(limpo.pedidos, [])
   })
 
   test('conjunto vazio não explode', () => {
