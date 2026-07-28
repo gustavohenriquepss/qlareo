@@ -99,6 +99,14 @@ export interface CanceledRow {
   valor: number;
 }
 
+/** Uma linha por pedido cancelado — a lista detalhada por trás dos agregados. */
+export interface CanceledOrderRow {
+  pedido: string;
+  data: string; // 'YYYY-MM-DD', truncada no fuso do relatório
+  valor: number;
+  pagamento: string;
+}
+
 export interface CanceledReport {
   totalPedidos: number;
   valorCancelado: number;
@@ -106,8 +114,9 @@ export interface CanceledReport {
   pedidosNoPeriodo: number;
   taxa: number;
   linhas: CanceledRow[];
-  porStatus: Array<{ status: string; pedidos: number; valor: number }>;
   porPagamento: Array<{ metodo: string; pedidos: number; valor: number }>;
+  /** A lista pedido a pedido, mais recente primeiro. */
+  pedidos: CanceledOrderRow[];
 }
 
 /** GET /api/reports/sales-by-region */

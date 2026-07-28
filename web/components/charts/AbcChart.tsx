@@ -104,7 +104,10 @@ export function AbcChart<T extends RankedRow>({
         ))}
       </ul>
 
-      <div className="h-72 w-full">
+      {/* `aria-hidden` só no desenho, não na legenda nem na nota acima/abaixo:
+          o SVG do recharts leria fora de ordem, e a tabela de curva ABC abaixo
+          já dá os mesmos números com a coluna "Classe". */}
+      <div className="h-72 w-full" aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}

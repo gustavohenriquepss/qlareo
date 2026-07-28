@@ -95,7 +95,7 @@ export default async function RegiaoPage({
 
   return (
     <div className="space-y-4">
-      <ExportBar page="/regiao" filters={filters} />
+      <ExportBar page="/vendas/regiao" filters={filters} />
 
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatTile

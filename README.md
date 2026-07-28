@@ -213,7 +213,7 @@ recortes de vendas como sub-rotas:
 | `/promocoes` | Receita com desconto e custo do desconto |
 | `/regiao` | Faturamento por UF de entrega, com ticket médio e participação |
 | `/origem` | Faturamento por cupom, origem (utm_source) e campanha |
-| `/cancelados` | Taxa de cancelamento, valor cancelado, por situação e pagamento |
+| `/cancelados` | Pedidos e valor cancelados (só cancelamento concluído), taxa, por pagamento e a lista pedido a pedido |
 
 Três decisões que explicam a maior parte do código:
 
