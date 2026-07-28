@@ -102,11 +102,23 @@ function gerarPedidos(dias: number): CanonicalOrder[] {
       const status =
         r < 0.86 ? 'paid' : r < 0.94 ? 'pending' : r < 0.98 ? 'canceled' : 'refunded'
 
+      // O status CRU não é o canônico repetido: é o nome que a VTEX usa, que é
+      // o que o relatório de cancelados quebra em linhas. Com `rawStatus` igual
+      // ao canônico, a quebra sairia com uma linha só ("canceled") e não
+      // exercitaria a distinção entre cancelamento concluído e em curso.
+      const RAW: Record<string, string[]> = {
+        paid: ['invoiced', 'payment-approved', 'handling', 'ready-for-handling'],
+        pending: ['payment-pending', 'window-to-change-payment'],
+        canceled: ['canceled', 'cancellation-requested'],
+        refunded: ['canceled'],
+      }
+      const rawStatus = pick(RAW[status]!)
+
       orders.push({
         orderId: `${ACCOUNT}-${dia.toISOString().slice(0, 10)}-${n}`,
         createdAt: createdAt.toISOString(),
         status: status as CanonicalOrder['status'],
-        rawStatus: status,
+        rawStatus,
         totalMinor,
         currency: 'BRL',
         paymentMethod: pick(PAGAMENTOS),

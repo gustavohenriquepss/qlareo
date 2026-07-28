@@ -22,6 +22,7 @@
 import { count, money, percent, type Sheet } from "./csv";
 import type { Filters } from "./filters";
 import type {
+  CanceledReport,
   ProductsReport,
   PromoReport,
   RetentionReport,
@@ -193,6 +194,35 @@ export const EXPORTS = {
       ],
     }),
   }),
+  cancelados: spec<CanceledReport>({
+    report: "canceled-orders",
+    label: "Pedidos cancelados",
+    slug: "pedidos-cancelados",
+    build: (d) => ({
+      // A série temporal, não os escalares: é a forma longa que vira gráfico e
+      // tabela dinâmica na planilha. A taxa e o total do período são derivados
+      // (=SOMA / contagem), então não viram linha aqui.
+      //
+      // "Valor cancelado (R$)", nunca "Faturamento": este CSV vai acabar na
+      // mesma pasta que o de vendas, e é o cabeçalho que impede a soma errada.
+      columns: ["Período", "Pedidos cancelados", "Valor cancelado (R$)"],
+      rows: d.linhas.map((l) => [
+        l.bucket,
+        count(l.pedidos),
+        money(l.valor),
+      ]),
+    }),
+  }),
+
+  "cancelados-por-situacao": spec<CanceledReport>({
+    report: "canceled-orders",
+    label: "Por situação",
+    slug: "cancelados-por-situacao",
+    build: (d) => ({
+      columns: ["Situação", "Pedidos", "Valor cancelado (R$)"],
+      rows: d.porStatus.map((s) => [s.status, count(s.pedidos), money(s.valor)]),
+    }),
+  }),
 } as const satisfies Record<string, ExportSpec>;
 
 export type ExportKey = keyof typeof EXPORTS;
@@ -221,6 +251,7 @@ export const PAGE_EXPORTS = {
   "/produtos": ["produtos"],
   "/produtos/skus": ["skus"],
   "/promocoes": ["promocoes"],
+  "/cancelados": ["cancelados", "cancelados-por-situacao"],
 } as const satisfies Record<string, ReadonlyArray<ExportKey>>;
 
 export type ExportPage = keyof typeof PAGE_EXPORTS;

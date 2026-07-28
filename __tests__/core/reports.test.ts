@@ -11,6 +11,7 @@ import assert from 'node:assert/strict'
 
 import { type CanonicalItem, type CanonicalOrder } from '../../core/types'
 import {
+  canceledOrders,
   newVsReturning,
   promoEffectiveness,
   salesByPeriod,
@@ -527,6 +528,102 @@ describe('promoEffectiveness', () => {
     assert.equal(empty.receitaLiquida, 0)
     assert.equal(empty.descontoTotal, 0)
     assert.equal(empty.percentualDescontoMedio, 0)
+  })
+})
+
+// ============================================================================
+// 5. canceledOrders
+// ============================================================================
+
+describe('canceledOrders', () => {
+  // 5 pedidos no período; 2 cancelados (R$ 300) => taxa 40%.
+  const orders: CanonicalOrder[] = [
+    makeOrder({ orderId: 'ok1', totalMinor: 10000, rawStatus: 'invoiced' }),
+    makeOrder({ orderId: 'ok2', totalMinor: 10000, rawStatus: 'invoiced' }),
+    makeOrder({
+      orderId: 'pend',
+      status: 'pending',
+      rawStatus: 'payment-pending',
+      totalMinor: 5000,
+    }),
+    makeOrder({
+      orderId: 'canc1',
+      status: 'canceled',
+      rawStatus: 'canceled',
+      totalMinor: 20000, // R$ 200
+      createdAt: '2026-01-15T12:00:00Z', // 09h BRT -> dia 15
+      paymentMethod: 'Boleto',
+    }),
+    makeOrder({
+      orderId: 'canc2',
+      status: 'canceled',
+      rawStatus: 'cancellation-requested',
+      totalMinor: 10000, // R$ 100
+      createdAt: '2026-01-16T12:00:00Z', // 09h BRT -> dia 16
+      paymentMethod: 'Boleto',
+    }),
+  ]
+
+  const report = canceledOrders(orders, 'day')
+
+  test('conta e soma só os cancelados', () => {
+    assert.equal(report.totalPedidos, 2)
+    assert.equal(report.valorCancelado, 300) // (20000 + 10000) / 100
+  })
+
+  test('a taxa usa TODOS os pedidos do período como denominador', () => {
+    // 2 cancelados / 5 pedidos = 40%. Se o denominador fosse só o conjunto
+    // já filtrado, a taxa daria 100% e não diria nada.
+    assert.equal(report.pedidosNoPeriodo, 5)
+    assert.equal(report.taxa, 40)
+  })
+
+  test('NUNCA expõe um campo chamado "faturamento"', () => {
+    // Este dinheiro não entrou. Um campo com aquele nome acabaria somado ao
+    // relatório de vendas por alguém montando planilha.
+    assert.ok(!('faturamento' in report))
+    assert.ok(!report.linhas.some((l) => 'faturamento' in l))
+    assert.ok(!report.porStatus.some((s) => 'faturamento' in s))
+  })
+
+  test('separa canceled de cancellation-requested pelo status CRU', () => {
+    // O status canônico funde os dois; é o rawStatus que distingue "concluído"
+    // de "em curso" — e são ações diferentes para o lojista.
+    assert.deepEqual(report.porStatus, [
+      { status: 'canceled', valor: 200, pedidos: 1 },
+      { status: 'cancellation-requested', valor: 100, pedidos: 1 },
+    ])
+  })
+
+  test('agrupa por meio de pagamento', () => {
+    assert.deepEqual(report.porPagamento, [
+      { metodo: 'Boleto', valor: 300, pedidos: 2 },
+    ])
+  })
+
+  test('série temporal no fuso do relatório, ordenada', () => {
+    assert.deepEqual(report.linhas, [
+      { bucket: '2026-01-15', pedidos: 1, valor: 200 },
+      { bucket: '2026-01-16', pedidos: 1, valor: 100 },
+    ])
+  })
+
+  test('período sem nenhum cancelamento: zeros, sem divisão por zero', () => {
+    const limpo = canceledOrders([
+      makeOrder({ orderId: 'ok', totalMinor: 10000 }),
+    ])
+    assert.equal(limpo.totalPedidos, 0)
+    assert.equal(limpo.valorCancelado, 0)
+    assert.equal(limpo.taxa, 0)
+    assert.equal(limpo.pedidosNoPeriodo, 1)
+    assert.deepEqual(limpo.linhas, [])
+  })
+
+  test('conjunto vazio não explode', () => {
+    const empty = canceledOrders([])
+    assert.equal(empty.totalPedidos, 0)
+    assert.equal(empty.taxa, 0)
+    assert.equal(empty.pedidosNoPeriodo, 0)
   })
 })
 

@@ -88,6 +88,29 @@ export interface PromoReport {
 }
 
 /**
+ * GET /api/reports/canceled-orders
+ *
+ * Sem `faturamento` em lugar nenhum, de propósito: este dinheiro não entrou, e
+ * o nome do campo é a única defesa contra alguém somá-lo às vendas.
+ */
+export interface CanceledRow {
+  bucket: string;
+  pedidos: number;
+  valor: number;
+}
+
+export interface CanceledReport {
+  totalPedidos: number;
+  valorCancelado: number;
+  /** Todos os pedidos do período, de qualquer status — denominador da taxa. */
+  pedidosNoPeriodo: number;
+  taxa: number;
+  linhas: CanceledRow[];
+  porStatus: Array<{ status: string; pedidos: number; valor: number }>;
+  porPagamento: Array<{ metodo: string; pedidos: number; valor: number }>;
+}
+
+/**
  * Resposta alternativa dos relatórios de item quando o período tem pedidos mas
  * nenhum com detalhe sincronizado. O servidor devolve isto em vez de zeros —
  * a UI precisa distinguir "não há desconto" de "não sabemos ainda".

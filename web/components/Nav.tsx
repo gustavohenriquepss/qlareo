@@ -63,6 +63,7 @@ const REPORTS: ReadonlyArray<Report> = [
     ],
   },
   { href: "/promocoes", label: "Promoções" },
+  { href: "/cancelados", label: "Pedidos cancelados" },
 ];
 
 /**

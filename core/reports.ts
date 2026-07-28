@@ -411,6 +411,105 @@ export function promoEffectiveness(ordersWithItems: CanonicalOrder[]): PromoRepo
 }
 
 // ============================================================================
+// 5. Pedidos cancelados  (barato — só o cabeçalho do pedido)
+// ============================================================================
+
+export interface CanceledRow {
+  bucket: string   // 'YYYY-MM-DD' | 'YYYY-Www' | 'YYYY-MM'
+  pedidos: number
+  valor: number    // unidade maior (reais)
+}
+
+export interface CanceledReport {
+  /** Quantos pedidos cancelados no período. */
+  totalPedidos: number
+  /**
+   * Soma dos cancelados, em reais. NUNCA chamado de "faturamento": este dinheiro
+   * não entrou, e um campo com aquele nome acabaria somado ao relatório de
+   * vendas por alguém montando uma planilha.
+   */
+  valorCancelado: number
+  /** Denominador da taxa: TODOS os pedidos do período, de qualquer status. */
+  pedidosNoPeriodo: number
+  /** cancelados / pedidosNoPeriodo, em %. */
+  taxa: number
+  linhas: CanceledRow[]
+  /**
+   * Quebra pelo status CRU da plataforma. É o que separa 'canceled' (concluído)
+   * de 'cancellation-requested' (em curso) — dois estados que pedem ações
+   * diferentes e que o status canônico, por construção, funde num só.
+   */
+  porStatus: Array<{ status: string; pedidos: number; valor: number }>
+  /** Um meio de pagamento concentrando cancelamento é problema de gateway. */
+  porPagamento: Array<{ metodo: string; pedidos: number; valor: number }>
+}
+
+/**
+ * Cancelamentos do período: quanto, quando, de que tipo e por qual pagamento.
+ *
+ * RECEBE O CONJUNTO COMPLETO, sem `filterByScope` — e é a única função deste
+ * arquivo que exige isso. O motivo é estrutural: `liquido` (o recorte default da
+ * interface) existe justamente para REMOVER cancelados, então filtrar antes
+ * devolveria zero sempre. E a taxa precisa do total de pedidos do período como
+ * denominador, que um conjunto já filtrado não tem mais como informar.
+ *
+ * O recorte acontece aqui dentro, por `status === 'canceled'`.
+ */
+export function canceledOrders(
+  orders: CanonicalOrder[],
+  grain: Grain = 'day',
+  timezone: string = DEFAULT_TIMEZONE
+): CanceledReport {
+  const currency = currencyOf(orders)
+  const cancelados = orders.filter((o) => o.status === 'canceled')
+
+  const buckets = new Map<string, Acc>()
+  const status = new Map<string, Acc>()
+  const pgto = new Map<string, Acc>()
+
+  let totalMinor = 0
+
+  for (const o of cancelados) {
+    totalMinor += o.totalMinor
+    bump(buckets, bucketKey(o.createdAt, grain, timezone), o.totalMinor)
+    bump(status, o.rawStatus, o.totalMinor)
+    if (o.paymentMethod) bump(pgto, o.paymentMethod, o.totalMinor)
+  }
+
+  // `sortedRows` devolve a chave em `faturamento` porque nasceu no relatório de
+  // vendas. Aqui o campo é renomeado para `valor` na saída — mesmo cálculo,
+  // outro significado, e o nome tem de dizer qual dos dois é.
+  const comValor = (m: Map<string, Acc>) =>
+    sortedRows(m, currency).map(({ key, faturamento, pedidos }) => ({
+      key,
+      valor: faturamento,
+      pedidos,
+    }))
+
+  return {
+    totalPedidos: cancelados.length,
+    valorCancelado: toMajor(totalMinor, currency),
+    pedidosNoPeriodo: orders.length,
+    taxa: round(orders.length ? (cancelados.length / orders.length) * 100 : 0),
+    linhas: [...buckets.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([bucket, v]) => ({
+        bucket,
+        pedidos: v.ped,
+        valor: toMajor(v.minor, currency),
+      })),
+    porStatus: comValor(status).map(({ key, ...rest }) => ({
+      status: key,
+      ...rest,
+    })),
+    porPagamento: comValor(pgto).map(({ key, ...rest }) => ({
+      metodo: key,
+      ...rest,
+    })),
+  }
+}
+
+// ============================================================================
 // Helpers internos
 // ============================================================================
 

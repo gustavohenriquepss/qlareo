@@ -14,6 +14,7 @@ import {
   type DateRange,
   type Grain,
   type SalesScope,
+  canceledOrders,
   filterByScope,
   newVsReturning,
   promoEffectiveness,
@@ -29,6 +30,7 @@ export type ReportName =
   | 'top-products'
   | 'top-skus'
   | 'promotions'
+  | 'canceled-orders'
 
 export interface ReportRequest {
   report: ReportName
@@ -46,6 +48,21 @@ export async function runReport(
 ): Promise<unknown> {
   const withItems = ITEM_REPORTS.includes(req.report)
   const orders = await store.getOrders({ storeAccount, range: req.range, withItems })
+
+  // EXCEÇÃO DELIBERADA à regra "todo relatório passa por filterByScope".
+  //
+  // Este relatório é SOBRE os pedidos que o recorte remove: `liquido` (o default
+  // da interface) exclui cancelados, então filtrar antes devolveria uma tela
+  // vazia sempre. E a taxa de cancelamento precisa do total de pedidos do
+  // período como denominador — informação que um conjunto já filtrado perdeu.
+  //
+  // Não "conserte" isto passando `scoped`: o recorte por status acontece dentro
+  // de `canceledOrders`. Pelo mesmo motivo, a interface esconde o controle de
+  // Recorte nesta rota (ver web/components/FilterBar.tsx).
+  if (req.report === 'canceled-orders') {
+    return canceledOrders(orders, req.grain)
+  }
+
   const scoped = filterByScope(orders, req.scope)
 
   if (req.report === 'sales-by-period') {

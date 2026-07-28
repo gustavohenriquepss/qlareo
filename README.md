@@ -12,6 +12,7 @@ respondem "como foi a venda":
 | **Top produtos + Curva ABC** | Quais produtos concentram a receita, com classe A/B/C |
 | **SKUs vendidos** | A mesma curva por VARIAÇÃO: qual tamanho encalha e qual vive em ruptura |
 | **Efetividade de promoções** | Quanto de receita andou com desconto e quanto o desconto custou |
+| **Pedidos cancelados** | Taxa de cancelamento, valor que não entrou, e por qual situação e pagamento |
 
 > **Relação com o app VTEX IO.** Existe também uma versão deste produto como
 > [app nativo de Admin VTEX IO](https://github.com/gustavohenriquepss/vtex-sales-reports)
@@ -181,6 +182,7 @@ GET /api/reports/new-vs-returning?from&to&scope
 GET /api/reports/top-products?from&to&scope
 GET /api/reports/top-skus?from&to&scope
 GET /api/reports/promotions?from&to&scope
+GET /api/reports/canceled-orders?from&to&grain
 ```
 
 `scope` ∈ `bruto` | `liquido` | `todos`. Todas as rotas (menos `/health`) exigem
@@ -205,6 +207,7 @@ recortes de vendas como sub-rotas:
 | `/clientes` | Novos vs. recorrentes e taxa de recompra |
 | `/produtos`, `/produtos/skus` | Curva ABC por produto e por SKU |
 | `/promocoes` | Receita com desconto e custo do desconto |
+| `/cancelados` | Taxa de cancelamento, valor cancelado, por situação e pagamento |
 
 Três decisões que explicam a maior parte do código:
 

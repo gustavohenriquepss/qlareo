@@ -10,6 +10,7 @@
  *   GET /api/reports/top-products?from&to&scope
  *   GET /api/reports/top-skus?from&to&scope
  *   GET /api/reports/promotions?from&to&scope
+ *   GET /api/reports/canceled-orders?from&to&grain   (ignora `scope` — ver reports.ts)
  *   GET /health
  * -----------------------------------------------------------------------------
  */

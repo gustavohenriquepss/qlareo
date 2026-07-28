@@ -24,8 +24,32 @@ const PENDING_STATUSES = new Set<string>([
   'incomplete',
 ])
 
-/** Status VTEX de cancelamento. */
-const CANCELED_STATUSES = new Set<string>(['canceled'])
+/**
+ * Status VTEX de cancelamento.
+ *
+ * `cancellation-requested` entra junto com `canceled` de propósito: é o pedido
+ * cujo cancelamento já foi PEDIDO e ainda não concluiu no workflow. Deixá-lo
+ * fora (o que o default `paid` fazia) tem dois custos ao mesmo tempo — ele
+ * conta como faturamento, e some do relatório de cancelados justamente na
+ * janela em que o lojista ainda pode agir sobre ele.
+ *
+ * A distinção entre os dois não se perde: `rawStatus` chega intacto ao
+ * relatório, que os quebra em linhas separadas (ver `canceledOrders`).
+ *
+ * ATENÇÃO — esta lista NÃO foi verificada contra uma conta real. O workflow da
+ * VTEX é customizável e uma loja pode ter um status de cancelamento próprio
+ * ('cancelado-pelo-cliente', 'cancelamento-antifraude'). Para conferir:
+ *
+ *   SELECT raw_status, count(*) FROM orders
+ *   WHERE store_account = '<conta>' GROUP BY raw_status ORDER BY 2 DESC;
+ *
+ * Todo status de cancelamento que aparecer ali e não estiver aqui está sendo
+ * contado como venda.
+ */
+const CANCELED_STATUSES = new Set<string>([
+  'canceled',
+  'cancellation-requested',
+])
 
 /**
  * Status VTEX -> status canônico.

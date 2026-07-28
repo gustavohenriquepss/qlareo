@@ -35,12 +35,36 @@ const SERIES_1 = "var(--series-1)";
 const AXIS = "var(--axis)";
 const GRID = "var(--grid)";
 
-interface Props {
-  rows: SalesRow[];
-  grain: Grain;
+/**
+ * O mínimo que uma linha da série precisa ter. `SalesRow` satisfaz; `CanceledRow`
+ * também — o campo do valor é indicado por `campoValor`, porque os dois se
+ * chamam diferente de propósito (`faturamento` é dinheiro que entrou, `valor`
+ * de cancelado não é, e o nome tem de dizer qual é qual).
+ */
+export interface TrendRow {
+  bucket: string;
+  pedidos: number;
 }
 
-export function SalesTrendChart({ rows, grain }: Props) {
+interface Props<T extends TrendRow> {
+  rows: T[];
+  grain: Grain;
+  /**
+   * NOME do campo numérico a plotar — não uma função. Client Component: só
+   * dado atravessa a fronteira server→client. Default `faturamento` mantém as
+   * telas de vendas chamando isto sem mudar nada.
+   */
+  campoValor?: Extract<keyof T, string>;
+  /** Rótulo do valor no tooltip. */
+  rotuloValor?: string;
+}
+
+export function SalesTrendChart<T extends TrendRow>({
+  rows,
+  grain,
+  campoValor = "faturamento" as Extract<keyof T, string>,
+  rotuloValor = "Faturamento",
+}: Props<T>) {
   const data = rows.map((r) => ({ ...r, rotulo: formatBucket(r.bucket, grain) }));
   const asBars = data.length < 4;
   // A animação de entrada do recharts é JS, então o bloco de reduced-motion do
@@ -71,20 +95,23 @@ export function SalesTrendChart({ rows, grain }: Props) {
       <Tooltip
         cursor={{ stroke: AXIS, strokeWidth: 1 }}
         content={(props) => {
-          const row = props.payload?.[0]?.payload as SalesRow | undefined;
+          const row = props.payload?.[0]?.payload as T | undefined;
           if (!props.active || !row) return null;
+          // Ticket médio só existe no relatório de vendas; a série de
+          // cancelados não tem — e uma linha "R$ 0,00" ali seria uma
+          // afirmação, não uma ausência.
+          const ticket = (row as Partial<SalesRow>).ticketMedio;
           return (
             <TooltipShell title={formatBucketLong(row.bucket, grain)}>
               <TooltipRow
                 color={SERIES_1}
-                label="Faturamento"
-                value={formatMoney(row.faturamento)}
+                label={rotuloValor}
+                value={formatMoney(Number(row[campoValor]))}
               />
               <TooltipRow label="Pedidos" value={formatInt(row.pedidos)} />
-              <TooltipRow
-                label="Ticket médio"
-                value={formatMoney(row.ticketMedio)}
-              />
+              {ticket !== undefined && (
+                <TooltipRow label="Ticket médio" value={formatMoney(ticket)} />
+              )}
             </TooltipShell>
           );
         }}
@@ -99,7 +126,7 @@ export function SalesTrendChart({ rows, grain }: Props) {
           <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
             {axes}
             <Bar
-              dataKey="faturamento"
+              dataKey={campoValor}
               fill={SERIES_1}
               radius={[4, 4, 0, 0]}
               maxBarSize={72}
@@ -114,7 +141,7 @@ export function SalesTrendChart({ rows, grain }: Props) {
               // entre dois dias — o faturamento do dia 5 não "passou por" um
               // pico às 12h do dia 4. Cada bucket é discreto; ligue-os com reta.
               type="linear"
-              dataKey="faturamento"
+              dataKey={campoValor}
               stroke={SERIES_1}
               strokeWidth={2}
               dot={false}
