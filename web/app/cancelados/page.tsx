@@ -25,16 +25,6 @@ import { parseFilters, toApiQuery } from "@/lib/filters";
 import { formatInt, formatMoney, formatPercent } from "@/lib/format";
 import type { CanceledReport } from "@/lib/types";
 
-/**
- * Os status crus da VTEX não são autoexplicativos para quem abre o relatório.
- * O código continua visível ao lado — é ele que aparece no Admin e num chamado
- * de suporte —, mas a frase é o que responde "e daí?".
- */
-const EXPLICACAO: Record<string, string> = {
-  canceled: "Cancelamento concluído",
-  "cancellation-requested": "Cancelamento pedido, ainda em curso",
-};
-
 export default async function CanceladosPage({
   searchParams,
 }: {
@@ -66,33 +56,6 @@ export default async function CanceladosPage({
     );
   }
 
-  const statusColumns: Array<Column<CanceledReport["porStatus"][number]>> = [
-    {
-      key: "status",
-      header: "Situação",
-      render: (r) => (
-        <span className="flex flex-col">
-          <span className="text-ink">{EXPLICACAO[r.status] ?? r.status}</span>
-          {EXPLICACAO[r.status] && (
-            <span className="text-xs text-ink-muted">{r.status}</span>
-          )}
-        </span>
-      ),
-    },
-    {
-      key: "pedidos",
-      header: "Pedidos",
-      numeric: true,
-      render: (r) => formatInt(r.pedidos),
-    },
-    {
-      key: "valor",
-      header: "Valor cancelado",
-      numeric: true,
-      render: (r) => formatMoney(r.valor),
-    },
-  ];
-
   const pagamentoColumns: Array<
     Column<CanceledReport["porPagamento"][number]>
   > = [
@@ -119,9 +82,9 @@ export default async function CanceladosPage({
 
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatTile
-          label="Taxa de cancelamento"
-          value={formatPercent(d.taxa)}
-          context={`${formatInt(d.totalPedidos)} de ${formatInt(d.pedidosNoPeriodo)} pedidos do período`}
+          label="Pedidos cancelados"
+          value={formatInt(d.totalPedidos)}
+          context={`Em ${formatInt(d.linhas.length)} dias com cancelamento`}
           emphasis
         />
         <StatTile
@@ -130,9 +93,9 @@ export default async function CanceladosPage({
           context="Não entrou no faturamento — nem no bruto"
         />
         <StatTile
-          label="Pedidos cancelados"
-          value={formatInt(d.totalPedidos)}
-          context={`Em ${formatInt(d.linhas.length)} dias com cancelamento`}
+          label="Taxa de cancelamento"
+          value={formatPercent(d.taxa)}
+          context={`${formatInt(d.totalPedidos)} de ${formatInt(d.pedidosNoPeriodo)} pedidos do período`}
         />
       </dl>
 
@@ -145,18 +108,6 @@ export default async function CanceladosPage({
           grain={filters.grain}
           campoValor="valor"
           rotuloValor="Valor cancelado"
-        />
-      </Card>
-
-      <Card
-        title="Por situação"
-        hint="Cancelamento concluído e cancelamento em curso pedem ações diferentes."
-      >
-        <DataTable
-          caption="Pedidos cancelados por situação do workflow"
-          columns={statusColumns}
-          rows={d.porStatus}
-          rowKey={(r) => r.status}
         />
       </Card>
 

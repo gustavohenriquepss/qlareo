@@ -283,16 +283,6 @@ export const EXPORTS = {
       ]),
     }),
   }),
-
-  "cancelados-por-situacao": spec<CanceledReport>({
-    report: "canceled-orders",
-    label: "Por situação",
-    slug: "cancelados-por-situacao",
-    build: (d) => ({
-      columns: ["Situação", "Pedidos", "Valor cancelado (R$)"],
-      rows: d.porStatus.map((s) => [s.status, count(s.pedidos), money(s.valor)]),
-    }),
-  }),
 } as const satisfies Record<string, ExportSpec>;
 
 export type ExportKey = keyof typeof EXPORTS;
@@ -324,7 +314,7 @@ export const PAGE_EXPORTS = {
   "/promocoes": ["promocoes"],
   "/promocoes/cupons": ["cupons"],
   "/promocoes/origem": ["origem"],
-  "/cancelados": ["cancelados", "cancelados-por-situacao"],
+  "/cancelados": ["cancelados"],
 } as const satisfies Record<string, ReadonlyArray<ExportKey>>;
 
 export type ExportPage = keyof typeof PAGE_EXPORTS;

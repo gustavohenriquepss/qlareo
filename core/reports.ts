@@ -434,12 +434,6 @@ export interface CanceledReport {
   /** cancelados / pedidosNoPeriodo, em %. */
   taxa: number
   linhas: CanceledRow[]
-  /**
-   * Quebra pelo status CRU da plataforma. É o que separa 'canceled' (concluído)
-   * de 'cancellation-requested' (em curso) — dois estados que pedem ações
-   * diferentes e que o status canônico, por construção, funde num só.
-   */
-  porStatus: Array<{ status: string; pedidos: number; valor: number }>
   /** Um meio de pagamento concentrando cancelamento é problema de gateway. */
   porPagamento: Array<{ metodo: string; pedidos: number; valor: number }>
 }
@@ -453,7 +447,15 @@ export interface CanceledReport {
  * devolveria zero sempre. E a taxa precisa do total de pedidos do período como
  * denominador, que um conjunto já filtrado não tem mais como informar.
  *
- * O recorte acontece aqui dentro, por `status === 'canceled'`.
+ * O recorte acontece aqui dentro: cancelamento CONCLUÍDO, não o que ainda está
+ * em curso. `cancellation-requested` continua sendo `canceled` no status
+ * canônico (para NÃO virar faturamento — ver o mapper), mas é excluído deste
+ * relatório de propósito: só conta o pedido que de fato foi cancelado. O
+ * `rawStatus` segue preservado para auditoria.
+ *
+ * Excluir o "em curso" não deixa pedido em limbo: toda janela desta tela tem no
+ * mínimo 7 dias, e nenhum pedido passa de 6 em `cancellation-requested` — ou
+ * concluiu o cancelamento, ou voltou a pago, sempre antes de o relatório fechar.
  */
 export function canceledOrders(
   orders: CanonicalOrder[],
@@ -461,10 +463,11 @@ export function canceledOrders(
   timezone: string = DEFAULT_TIMEZONE
 ): CanceledReport {
   const currency = currencyOf(orders)
-  const cancelados = orders.filter((o) => o.status === 'canceled')
+  const cancelados = orders.filter(
+    (o) => o.status === 'canceled' && o.rawStatus !== 'cancellation-requested'
+  )
 
   const buckets = new Map<string, Acc>()
-  const status = new Map<string, Acc>()
   const pgto = new Map<string, Acc>()
 
   let totalMinor = 0
@@ -472,7 +475,6 @@ export function canceledOrders(
   for (const o of cancelados) {
     totalMinor += o.totalMinor
     bump(buckets, bucketKey(o.createdAt, grain, timezone), o.totalMinor)
-    bump(status, o.rawStatus, o.totalMinor)
     if (o.paymentMethod) bump(pgto, o.paymentMethod, o.totalMinor)
   }
 
@@ -498,10 +500,6 @@ export function canceledOrders(
         pedidos: v.ped,
         valor: toMajor(v.minor, currency),
       })),
-    porStatus: comValor(status).map(({ key, ...rest }) => ({
-      status: key,
-      ...rest,
-    })),
     porPagamento: comValor(pgto).map(({ key, ...rest }) => ({
       metodo: key,
       ...rest,

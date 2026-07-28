@@ -106,7 +106,6 @@ export interface CanceledReport {
   pedidosNoPeriodo: number;
   taxa: number;
   linhas: CanceledRow[];
-  porStatus: Array<{ status: string; pedidos: number; valor: number }>;
   porPagamento: Array<{ metodo: string; pedidos: number; valor: number }>;
 }
 

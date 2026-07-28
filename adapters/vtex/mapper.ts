@@ -32,13 +32,13 @@ const PENDING_STATUSES = new Set<string>([
  * Status VTEX de cancelamento.
  *
  * `cancellation-requested` entra junto com `canceled` de propósito: é o pedido
- * cujo cancelamento já foi PEDIDO e ainda não concluiu no workflow. Deixá-lo
- * fora (o que o default `paid` fazia) tem dois custos ao mesmo tempo — ele
- * conta como faturamento, e some do relatório de cancelados justamente na
- * janela em que o lojista ainda pode agir sobre ele.
+ * cujo cancelamento já foi PEDIDO e ainda não concluiu no workflow. Mapeá-lo
+ * como `paid` (o default) o contaria como faturamento — dinheiro que está
+ * saindo, somado como se tivesse entrado. Aqui ele fica FORA da venda.
  *
- * A distinção entre os dois não se perde: `rawStatus` chega intacto ao
- * relatório, que os quebra em linhas separadas (ver `canceledOrders`).
+ * Isso é sobre faturamento, não sobre o relatório de cancelados: lá só entra o
+ * cancelamento CONCLUÍDO (`canceledOrders` exclui `cancellation-requested`), e
+ * o `rawStatus` chega intacto para auditar essa distinção.
  *
  * ATENÇÃO — esta lista NÃO foi verificada contra uma conta real. O workflow da
  * VTEX é customizável e uma loja pode ter um status de cancelamento próprio

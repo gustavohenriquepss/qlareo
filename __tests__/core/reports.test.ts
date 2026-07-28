@@ -538,7 +538,9 @@ describe('promoEffectiveness', () => {
 // ============================================================================
 
 describe('canceledOrders', () => {
-  // 5 pedidos no período; 2 cancelados (R$ 300) => taxa 40%.
+  // 5 pedidos no período. Dois têm status canônico 'canceled', mas só UM foi
+  // de fato cancelado (R$ 200): o outro está em 'cancellation-requested' e o
+  // relatório o exclui de propósito. Taxa = 1/5 = 20%.
   const orders: CanonicalOrder[] = [
     makeOrder({ orderId: 'ok1', totalMinor: 10000, rawStatus: 'invoiced' }),
     makeOrder({ orderId: 'ok2', totalMinor: 10000, rawStatus: 'invoiced' }),
@@ -568,16 +570,28 @@ describe('canceledOrders', () => {
 
   const report = canceledOrders(orders, 'day')
 
-  test('conta e soma só os cancelados', () => {
-    assert.equal(report.totalPedidos, 2)
-    assert.equal(report.valorCancelado, 300) // (20000 + 10000) / 100
+  test('conta e soma só o cancelamento concluído, não o em curso', () => {
+    // canc2 está em 'cancellation-requested' (em curso) e fica de fora.
+    assert.equal(report.totalPedidos, 1)
+    assert.equal(report.valorCancelado, 200) // 20000 / 100
   })
 
   test('a taxa usa TODOS os pedidos do período como denominador', () => {
-    // 2 cancelados / 5 pedidos = 40%. Se o denominador fosse só o conjunto
+    // 1 cancelado / 5 pedidos = 20%. Se o denominador fosse só o conjunto
     // já filtrado, a taxa daria 100% e não diria nada.
     assert.equal(report.pedidosNoPeriodo, 5)
-    assert.equal(report.taxa, 40)
+    assert.equal(report.taxa, 20)
+  })
+
+  test('exclui cancellation-requested do relatório', () => {
+    // O status canônico funde 'canceled' e 'cancellation-requested' (para
+    // nenhum dos dois virar faturamento), mas este relatório é sobre o que de
+    // fato foi cancelado: o pedido "em curso" não conta em nenhum número.
+    assert.equal(report.totalPedidos, 1)
+    assert.ok(!report.linhas.some((l) => l.bucket === '2026-01-16'))
+    assert.deepEqual(report.porPagamento, [
+      { metodo: 'Boleto', valor: 200, pedidos: 1 },
+    ])
   })
 
   test('NUNCA expõe um campo chamado "faturamento"', () => {
@@ -585,28 +599,12 @@ describe('canceledOrders', () => {
     // relatório de vendas por alguém montando planilha.
     assert.ok(!('faturamento' in report))
     assert.ok(!report.linhas.some((l) => 'faturamento' in l))
-    assert.ok(!report.porStatus.some((s) => 'faturamento' in s))
-  })
-
-  test('separa canceled de cancellation-requested pelo status CRU', () => {
-    // O status canônico funde os dois; é o rawStatus que distingue "concluído"
-    // de "em curso" — e são ações diferentes para o lojista.
-    assert.deepEqual(report.porStatus, [
-      { status: 'canceled', valor: 200, pedidos: 1 },
-      { status: 'cancellation-requested', valor: 100, pedidos: 1 },
-    ])
-  })
-
-  test('agrupa por meio de pagamento', () => {
-    assert.deepEqual(report.porPagamento, [
-      { metodo: 'Boleto', valor: 300, pedidos: 2 },
-    ])
+    assert.ok(!report.porPagamento.some((p) => 'faturamento' in p))
   })
 
   test('série temporal no fuso do relatório, ordenada', () => {
     assert.deepEqual(report.linhas, [
       { bucket: '2026-01-15', pedidos: 1, valor: 200 },
-      { bucket: '2026-01-16', pedidos: 1, valor: 100 },
     ])
   })
 
