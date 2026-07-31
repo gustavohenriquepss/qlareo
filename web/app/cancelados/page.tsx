@@ -96,18 +96,12 @@ export default async function CanceladosPage({
         <StatTile
           label="Pedidos cancelados"
           value={formatInt(d.totalPedidos)}
-          context={`Em ${formatInt(d.linhas.length)} dias com cancelamento`}
           emphasis
         />
-        <StatTile
-          label="Valor cancelado"
-          value={formatMoney(d.valorCancelado)}
-          context="Não entrou no faturamento — nem no bruto"
-        />
+        <StatTile label="Valor cancelado" value={formatMoney(d.valorCancelado)} />
         <StatTile
           label="Taxa de cancelamento"
           value={formatPercent(d.taxa)}
-          context={`${formatInt(d.totalPedidos)} de ${formatInt(d.pedidosNoPeriodo)} pedidos do período`}
         />
       </dl>
 
@@ -120,6 +114,18 @@ export default async function CanceladosPage({
           grain={filters.grain}
           campoValor="valor"
           rotuloValor="Valor cancelado"
+        />
+      </Card>
+
+      <Card
+        title="Pedidos cancelados"
+        hint="A lista pedido a pedido, mais recente primeiro — a fonte conferível dos totais acima."
+      >
+        <DataTable
+          caption="Lista de pedidos cancelados no período"
+          columns={pedidoColumns}
+          rows={d.pedidos}
+          rowKey={(r) => r.pedido}
         />
       </Card>
 
@@ -161,18 +167,6 @@ export default async function CanceladosPage({
             meio de pagamento informado não entram em nenhuma linha.
           </p>
         )}
-      </Card>
-
-      <Card
-        title="Pedidos cancelados"
-        hint="A lista pedido a pedido, mais recente primeiro — a fonte conferível dos totais acima."
-      >
-        <DataTable
-          caption="Lista de pedidos cancelados no período"
-          columns={pedidoColumns}
-          rows={d.pedidos}
-          rowKey={(r) => r.pedido}
-        />
       </Card>
     </div>
   );

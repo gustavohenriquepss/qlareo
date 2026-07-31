@@ -9,35 +9,26 @@
  */
 import { StatTile } from "@/components/StatTile";
 import type { Filters } from "@/lib/filters";
-import { formatInt, formatISODate, formatMoney } from "@/lib/format";
+import { formatInt, formatMoney } from "@/lib/format";
 import type { SalesReport } from "@/lib/types";
 
 export function SalesHeadline({
   report,
-  filters,
 }: {
   report: SalesReport;
   filters: Filters;
 }) {
-  const periodo = `${formatISODate(filters.from)} a ${formatISODate(filters.to)}`;
-
   return (
     <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <StatTile
         label="Faturamento"
         value={formatMoney(report.totalFaturamento)}
-        context={periodo}
         emphasis
       />
-      <StatTile
-        label="Pedidos"
-        value={formatInt(report.totalPedidos)}
-        context={`Recorte: ${filters.scope}`}
-      />
+      <StatTile label="Pedidos" value={formatInt(report.totalPedidos)} />
       <StatTile
         label="Ticket médio"
         value={formatMoney(report.ticketMedioGeral)}
-        context="Faturamento ÷ pedidos"
       />
     </dl>
   );
