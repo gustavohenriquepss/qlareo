@@ -111,17 +111,20 @@ export default async function ProdutosPage({
           label="Receita em produtos"
           value={formatMoney(receitaTotal)}
           context={`${formatInt(totalPedidos)} pedidos analisados`}
+          contextInTooltip
           emphasis
         />
         <StatTile
           label="Produtos distintos"
           value={formatInt(produtos.length)}
           context="Agrupados por produto, não por SKU"
+          contextInTooltip
         />
         <StatTile
           label="Concentração (classe A)"
           value={formatInt(classeA.length)}
           context={`${formatInt(classeA.length)} produtos = ${formatMoney(receitaA)} de receita`}
+          contextInTooltip
         />
       </dl>
 

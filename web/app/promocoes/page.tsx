@@ -70,22 +70,26 @@ export default async function PromocoesPage({
           label="Desconto concedido"
           value={formatMoney(report.descontoTotal)}
           context="Preço de lista menos preço pago"
+          contextInTooltip
           emphasis
         />
         <StatTile
           label="Desconto médio"
           value={formatPercent(report.percentualDescontoMedio)}
           context="Sobre a receita bruta sem desconto"
+          contextInTooltip
         />
         <StatTile
           label="Receita líquida"
           value={formatMoney(report.receitaLiquida)}
           context={`Bruta: ${formatMoney(report.receitaBrutaSemDesconto)}`}
+          contextInTooltip
         />
         <StatTile
           label="Pedidos com desconto"
           value={formatInt(report.pedidosComDesconto)}
           context={`de ${formatInt(report.pedidosAnalisados)} analisados`}
+          contextInTooltip
         />
       </dl>
 

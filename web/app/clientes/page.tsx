@@ -56,17 +56,20 @@ export default async function ClientesPage({
           label="Taxa de recompra"
           value={formatPercent(report.taxaRecompra)}
           context="Clientes que compraram mais de uma vez"
+          contextInTooltip
           emphasis
         />
         <StatTile
           label="Clientes novos"
           value={formatInt(report.novos)}
           context="Um único pedido na janela"
+          contextInTooltip
         />
         <StatTile
           label="Clientes recorrentes"
           value={formatInt(report.recorrentes)}
           context="Dois ou mais pedidos na janela"
+          contextInTooltip
         />
       </dl>
 
