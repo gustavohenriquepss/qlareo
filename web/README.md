@@ -24,6 +24,7 @@ npm run dev                  # http://localhost:3001
 | `/vendas/pagamento`, `/vendas/seller` | os mesmos números por meio de pagamento e por seller |
 | `/clientes` | Novos vs. recorrentes e taxa de recompra |
 | `/produtos` | Top produtos e curva ABC |
+| `/produtos/skus` | Todos os produtos vendidos, com os SKUs de cada um indentados |
 | `/promocoes` | Receita com desconto e custo do desconto |
 | `/api/export/:key` | o relatório da tela como CSV |
 

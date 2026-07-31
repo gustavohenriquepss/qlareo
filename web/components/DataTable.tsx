@@ -28,6 +28,24 @@ interface DataTableProps<T> {
   caption?: string;
   /** Linha de totais, opcional, fixada no rodapé da tabela. */
   footer?: ReactNode;
+  /**
+   * Classes extras por linha, para o que depende da linha INTEIRA e não cabe
+   * numa célula — hoje o cursor de mão nas linhas que abrem algo. Só estilo: o
+   * que a linha significa continua tendo de estar no texto, senão não chega a
+   * quem lê por leitor de tela.
+   */
+  rowClassName?: (row: T) => string;
+  /**
+   * Clique na linha inteira. SÓ pode ser passado de um Client Component —
+   * função não atravessa a fronteira server→client, e um Server Component que
+   * passar isto quebra na serialização.
+   *
+   * É um atalho de MOUSE, nunca o único caminho: uma `<tr>` com `onClick` não
+   * recebe foco nem é anunciada como controle. Quem usa isto precisa ter um
+   * `<button>` de verdade dentro da linha (com `aria-expanded`, quando o clique
+   * abre algo) — é ele que serve teclado e leitor de tela. Ver `ProductSkuTable`.
+   */
+  onRowClick?: (row: T) => void;
 }
 
 export function DataTable<T>({
@@ -36,6 +54,8 @@ export function DataTable<T>({
   rowKey,
   caption,
   footer,
+  rowClassName,
+  onRowClick,
 }: DataTableProps<T>) {
   return (
     <div className="overflow-x-auto">
@@ -60,7 +80,10 @@ export function DataTable<T>({
           {rows.map((row) => (
             <tr
               key={rowKey(row)}
-              className="border-b border-border-subtle last:border-b-0 hover:bg-surface-2"
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={`border-b border-border-subtle last:border-b-0 hover:bg-surface-2 ${
+                rowClassName?.(row) ?? ""
+              }`}
             >
               {columns.map((col) => (
                 <td

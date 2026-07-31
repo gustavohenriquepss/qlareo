@@ -148,31 +148,34 @@ export const EXPORTS = {
 
   skus: spec<SkusReport>({
     report: "top-skus",
-    label: "SKUs e curva ABC",
-    slug: "skus-abc",
+    label: "Produtos vendidos (por SKU)",
+    slug: "produtos-vendidos-por-sku",
     build: (d) => ({
+      // Sem "Classe" nem "% acumulado": a tela `/produtos/skus` não classifica
+      // SKU em curva ABC (ver o cabeçalho daquela página), e um CSV com uma
+      // coluna que a tela não mostra é uma classificação que ninguém conferiu.
+      // Quem quer ABC exporta `/produtos`.
+      //
       // As DUAS chaves, e nesta ordem: o `skuId` é a linha, o `productId` é o
-      // que permite um PROCV agrupando as variações de volta em produto. Levar
-      // só uma delas obrigaria quem monta a planilha a voltar aqui.
+      // que permite um PROCV agrupando as variações de volta em produto —
+      // inclusive contra o CSV de produtos, que é onde estão o nome derivado do
+      // produto e a contagem de pedidos sem dupla contagem. Levar só uma delas
+      // obrigaria quem monta a planilha a voltar aqui.
       columns: [
-        "Classe",
         "SKU",
         "ID do SKU",
         "ID do produto",
         "Receita (R$)",
         "Quantidade",
         "Pedidos",
-        "% acumulado",
       ],
       rows: d.skus.map((s) => [
-        s.classe,
         s.nome,
         s.skuId,
         s.productId,
         money(s.receita),
         count(s.quantidade),
         count(s.pedidos),
-        percent(s.percentualAcumulado),
       ]),
     }),
   }),
