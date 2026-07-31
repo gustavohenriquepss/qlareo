@@ -14,7 +14,7 @@ import { BRAND_COLOR, MARK_PATHS } from "@/components/Logo";
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
-const MARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="2.52 2.52 35.31 35.31" fill="${BRAND_COLOR}">${MARK_PATHS.map(
+const MARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="5.41992 5.41992 75.87738 75.87738" fill="${BRAND_COLOR}">${MARK_PATHS.map(
   (d) => `<path d="${d}"/>`,
 ).join("")}</svg>`;
 

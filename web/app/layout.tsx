@@ -47,13 +47,8 @@ export default function RootLayout({
             desceu para a coluna da esquerda (ver Nav). */}
         <header className="border-b border-border-subtle bg-surface">
           <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-4 px-4 py-3 sm:px-6">
-            {/* `items-center`, não `items-baseline`: a logo é uma imagem, não
-                tem linha de base tipográfica para alinhar com o subtítulo. */}
             <div className="flex items-center gap-3">
               <Logo className="h-6 w-auto text-ink" />
-              <span className="hidden text-xs text-ink-muted sm:inline">
-                Relatórios de vendas
-              </span>
             </div>
             <Suspense fallback={null}>
               <ServiceBadge />
