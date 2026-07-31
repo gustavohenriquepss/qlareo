@@ -10,7 +10,7 @@ respondem "como foi a venda":
 | **Vendas por período** | Faturamento, pedidos e ticket médio por dia/semana/mês; por pagamento e por seller |
 | **Novos vs. recorrentes** | Clientes de primeira compra vs. repetidos e taxa de recompra |
 | **Top produtos + Curva ABC** | Quais produtos concentram a receita, com classe A/B/C |
-| **SKUs vendidos** | A mesma curva por VARIAÇÃO: qual tamanho encalha e qual vive em ruptura |
+| **Produtos vendidos** | TODOS os produtos com venda no período, com os SKUs de cada um indentados: qual tamanho encalha e qual vive em ruptura |
 | **Efetividade de promoções** | Quanto de receita andou com desconto e quanto o desconto custou |
 | **Vendas por região** | Para qual UF a loja vende, com ticket médio e participação |
 | **Cupons e origem** | Qual cupom e qual campanha geraram receita — o "por quê" das promoções |
@@ -209,7 +209,8 @@ recortes de vendas como sub-rotas:
 | `/vendas` | Faturamento, pedidos e ticket médio por dia/semana/mês |
 | `/vendas/pagamento`, `/vendas/seller` | os mesmos números, quebrados por meio de pagamento e por seller |
 | `/clientes` | Novos vs. recorrentes e taxa de recompra |
-| `/produtos`, `/produtos/skus` | Curva ABC por produto e por SKU |
+| `/produtos` | Curva ABC por produto: quais concentram a receita |
+| `/produtos/skus` | Todos os produtos vendidos no período, com os SKUs de cada um indentados abaixo (sem ABC) |
 | `/promocoes` | Receita com desconto e custo do desconto |
 | `/regiao` | Faturamento por UF de entrega, com ticket médio e participação |
 | `/origem` | Faturamento por cupom, origem (utm_source) e campanha |
