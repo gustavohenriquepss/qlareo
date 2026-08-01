@@ -22,6 +22,7 @@ import { type OrderStore } from '../store/orderStore'
 import { type AppConfig } from './config'
 import { parseReportRequest } from './params'
 import { runReport } from './reports'
+import { type TenantResolver, TenantResolutionError } from './tenant'
 
 const REPORTS_PREFIX = '/api/reports/'
 
@@ -40,7 +41,17 @@ function authorized(req: IncomingMessage, config: AppConfig): boolean {
   return req.headers['x-api-key'] === config.apiKey
 }
 
-export function createApp(config: AppConfig, store: OrderStore) {
+/**
+ * `resolveTenant` é PARÂMETRO obrigatório, não opcional com default: um default
+ * seria um segundo caminho para produzir `storeAccount`, e o segundo caminho é
+ * sempre o que sobrevive por engano. Quem sobe o servidor escolhe explicitamente
+ * de onde vem o tenant (hoje `preAuthTenantResolver`; na 3.1, o do Clerk).
+ */
+export function createApp(
+  config: AppConfig,
+  store: OrderStore,
+  resolveTenant: TenantResolver
+) {
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
@@ -63,9 +74,19 @@ export function createApp(config: AppConfig, store: OrderStore) {
         return sendJson(res, 400, { error: parsed.error })
       }
 
-      const result = await runReport(store, config.vtex.account, parsed.value)
+      // O tenant vem daqui e de nenhum outro lugar — nunca de `config`, nunca
+      // da query string. Ver server/tenant.ts.
+      const tenant = await resolveTenant(req)
+
+      const result = await runReport(store, tenant.storeAccount, parsed.value)
       return sendJson(res, 200, result)
     } catch (err) {
+      // Falha de tenancy é 403, não 500: a requisição está bem formada, o que
+      // falta é vínculo. E a mensagem não diz se a org existe — quem não é
+      // membro não descobre daqui quais orgs existem.
+      if (err instanceof TenantResolutionError) {
+        return sendJson(res, 403, { error: err.message })
+      }
       // Nunca vaze o token num corpo de erro.
       const message = err instanceof Error ? err.message : 'Erro interno.'
       return sendJson(res, 500, { error: message })

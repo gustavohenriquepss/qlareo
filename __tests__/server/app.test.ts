@@ -11,6 +11,7 @@ import { type Server } from 'node:http'
 import { type CanonicalOrder } from '../../core'
 import { type AppConfig } from '../../server/config'
 import { createApp } from '../../server/main'
+import { preAuthTenantResolver } from '../../server/preAuthTenant'
 import { MemoryOrderStore } from '../../store/memoryStore'
 
 const ACCOUNT = 'minhaloja'
@@ -40,7 +41,7 @@ let base: string
 before(async () => {
   const store = new MemoryOrderStore()
   await store.upsertOrders(ACCOUNT, SAMPLE)
-  server = createApp(config, store)
+  server = createApp(config, store, preAuthTenantResolver(ACCOUNT))
   await new Promise<void>((resolve) => server.listen(0, resolve))
   const { port } = server.address() as AddressInfo
   base = `http://localhost:${port}`
