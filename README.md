@@ -105,7 +105,10 @@ sem passo de build) e não tem dependência de runtime além do driver `pg`.
 cp .env.example .env      # preencha as credenciais VTEX
 
 npm run demo              # roda os 4 relatórios com dados sintéticos (sem VTEX)
-npm test                  # 151 testes, zero dependência externa
+npm test                  # 204 testes, zero dependência externa
+
+# Os testes de schema e RLS exigem Postgres e ficam PULADOS sem esta variável:
+TEST_DATABASE_URL=postgres://qlareo:qlareo@localhost:5432/qlareo npm test
 
 # Com banco (produção-like):
 docker compose up -d      # sobe o Postgres local
@@ -232,6 +235,45 @@ Três decisões que explicam a maior parte do código:
   barras, a tabela abre fechada — o CSV não herda nenhum desses limites, e não
   leva linha de total nem preâmbulo de metadados (é o que faz o Excel errar as
   colunas). Período e recorte vão no nome do arquivo.
+
+## Isolamento entre lojas — duas trancas, nesta ordem
+
+O QLAREO guarda pedidos de lojas diferentes nas mesmas tabelas, separados pela
+coluna `store_account`. Duas coisas impedem uma loja de ler a outra, e a ordem
+entre elas **não** é decorativa:
+
+**1. O filtro explícito é o mecanismo principal.** Toda query de
+`store/postgres/postgresOrderStore.ts` tem `WHERE store_account = $1`, sempre
+parametrizado, e o valor vem de `resolveTenant` (`server/tenant.ts`) — que o
+alcança através de `memberships ⋈ vtex_accounts`. Pedir a conta de uma org da
+qual o usuário não é membro devolve zero linhas: não existe checagem de
+permissão para alguém esquecer de fazer, porque a ausência do vínculo já é a
+negativa.
+
+**2. A RLS (`005_rls.sql`) é defesa em profundidade — a segunda tranca.** Cada
+transação declara a loja com
+`set_config('qlareo.store_account', $1, true)`, e as policies de `orders`,
+`order_items` e `sync_state` comparam a coluna com esse valor. Se ninguém
+declarar, `current_setting` devolve NULL, a comparação não é verdadeira e a
+policy nega tudo: **falha fechada**.
+
+> **A RLS não substitui o filtro explícito, e tratá-la como principal é o erro
+> que ela deveria evitar.** Quem confia só nela acaba com queries sem `WHERE` no
+> código e um único `set_config` errado entre elas e o vazamento. A RLS existe
+> para o dia em que alguém escrever uma query nova e esquecer o filtro — nesse
+> dia ela devolve zero linhas em vez da loja inteira.
+
+Dois detalhes operacionais que sustentam o desenho:
+
+- **A app não conecta com o role dono das tabelas.** `ENABLE ROW LEVEL SECURITY`
+  (sem `FORCE`) não se aplica ao dono — é essa assimetria que mantém
+  `npm run migrate` e manutenção funcionando enquanto a aplicação fica sujeita à
+  policy. Em produção, `DATABASE_URL` usa um usuário que herda `qlareo_app`
+  (sem `SUPERUSER`, sem `BYPASSRLS`); as migrations rodam com o dono. **Se a app
+  conectar com o role dono, a RLS some em silêncio.**
+- **Toda leitura abre transação**, inclusive as que antes eram um `SELECT`
+  solto. O `true` do `set_config` prende o valor à transação; fora dela, ficaria
+  na conexão e vazaria para a próxima requisição que pegasse a mesma do pool.
 
 ## Privacidade — a diferença que importa neste modelo
 

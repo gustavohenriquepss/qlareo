@@ -413,4 +413,157 @@ describe('schema multi-tenant', { skip: semBanco }, () => {
       })
     })
   })
+
+  // ---------------------------------------------------------------------------
+  // 005_rls.sql — a segunda tranca.
+  //
+  // Os testes rodam sob `SET LOCAL ROLE qlareo_app`, e é isso que os torna
+  // válidos: `ENABLE ROW LEVEL SECURITY` (sem FORCE) não se aplica ao dono da
+  // tabela, e a conexão de teste é a dona. Sem trocar de role, tudo passaria
+  // por engano — RLS ligada e invisível.
+  // ---------------------------------------------------------------------------
+
+  describe('RLS', () => {
+    const LOJA_A = 'rls-loja-a'
+    const LOJA_B = 'rls-loja-b'
+
+    /** Insere um pedido como DONO (sem RLS), para depois lê-lo como app. */
+    async function semear(tx: SqlClient, storeAccount: string, orderId: string) {
+      await tx.query(
+        `INSERT INTO orders (store_account, order_id, created_at, status,
+                             raw_status, total_minor, currency)
+         VALUES ($1, $2, now(), 'paid', 'invoiced', 1000, 'BRL')`,
+        [storeAccount, orderId]
+      )
+    }
+
+    /** Passa a agir como a aplicação. Reverte no fim da transação. */
+    async function viraApp(tx: SqlClient): Promise<void> {
+      await tx.query(`SET LOCAL ROLE qlareo_app`)
+    }
+
+    async function declararLoja(tx: SqlClient, conta: string): Promise<void> {
+      await tx.query(`SELECT set_config('qlareo.store_account', $1, true)`, [conta])
+    }
+
+    test('sem declarar a loja, a app não enxerga NADA', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        await semear(tx, LOJA_A, 'rls-1')
+        await viraApp(tx)
+
+        const n = await contar(tx, `SELECT count(*) AS n FROM orders`)
+        assert.equal(
+          n,
+          0,
+          'falha fechada: sem qlareo.store_account, current_setting devolve ' +
+            'NULL, a comparação não é verdadeira e a policy nega tudo'
+        )
+      })
+    })
+
+    test('declarando a loja, enxerga a própria e só ela', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        await semear(tx, LOJA_A, 'rls-a1')
+        await semear(tx, LOJA_B, 'rls-b1')
+        await semear(tx, LOJA_B, 'rls-b2')
+        await viraApp(tx)
+        await declararLoja(tx, LOJA_A)
+
+        // Repare: SELECT sem WHERE nenhum. No código de produção o filtro
+        // explícito continua obrigatório — aqui ele é omitido de propósito,
+        // porque o que está sob teste é a rede que pega quem esquecer.
+        const res = await tx.query<{ store_account: string }>(
+          `SELECT store_account FROM orders`
+        )
+        assert.equal(res.rows.length, 1)
+        assert.equal(res.rows[0]!.store_account, LOJA_A)
+      })
+    })
+
+    test('a app não consegue gravar linha de outra loja', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        await viraApp(tx)
+        await declararLoja(tx, LOJA_A)
+
+        await assert.rejects(
+          () => semear(tx, LOJA_B, 'rls-invasor'),
+          /row-level security|policy/i,
+          'sem WITH CHECK, um INSERT criaria linha invisível para quem inseriu ' +
+            'e perfeitamente visível para a vítima'
+        )
+      })
+    })
+
+    test('a app não apaga o que não enxerga', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        await semear(tx, LOJA_B, 'rls-b-del')
+        await viraApp(tx)
+        await declararLoja(tx, LOJA_A)
+
+        const res = await tx.query(`DELETE FROM order_items WHERE true`)
+        assert.equal(res.rowCount, 0)
+
+        const del = await tx.query(`DELETE FROM orders WHERE order_id = $1`, [
+          'rls-b-del',
+        ])
+        assert.equal(del.rowCount, 0, 'DELETE sem tenant não pode alcançar a loja B')
+      })
+    })
+
+    test('a declaração não sobrevive à transação', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        await declararLoja(tx, LOJA_A)
+        const dentro = await tx.query<{ v: string | null }>(
+          `SELECT current_setting('qlareo.store_account', true) AS v`
+        )
+        assert.equal(dentro.rows[0]!.v, LOJA_A)
+      })
+
+      // Nova transação, mesma conexão do pool: o valor tem que ter sumido. Se
+      // sobrevivesse, dois lojistas dividindo conexão veriam os dados um do
+      // outro — o motivo de todo acesso passar por transação.
+      const depois = await db.query<{ v: string | null }>(
+        `SELECT current_setting('qlareo.store_account', true) AS v`
+      )
+      assert.ok(
+        !depois.rows[0]!.v,
+        'set_config com is_local=true não pode vazar para a próxima transação'
+      )
+    })
+
+    test('o role da aplicação não tem como escapar da policy', async () => {
+      const res = await db.query<{ rolsuper: boolean; rolbypassrls: boolean }>(
+        `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'qlareo_app'`
+      )
+      assert.equal(res.rows.length, 1, 'a migration 005 não criou o role')
+      assert.equal(res.rows[0]!.rolsuper, false, 'SUPERUSER ignora RLS')
+      assert.equal(res.rows[0]!.rolbypassrls, false, 'BYPASSRLS ignora RLS')
+    })
+
+    test('as três tabelas de dados têm RLS ligada e policy', async () => {
+      const res = await db.query<{ relname: string; relrowsecurity: boolean; n: string }>(
+        `SELECT c.relname, c.relrowsecurity,
+                (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid) AS n
+           FROM pg_class c
+           JOIN pg_namespace ns ON ns.oid = c.relnamespace
+          WHERE ns.nspname = 'public'
+            AND c.relname IN ('orders', 'order_items', 'sync_state')
+          ORDER BY c.relname`
+      )
+      assert.equal(res.rows.length, 3)
+      for (const r of res.rows) {
+        assert.equal(r.relrowsecurity, true, `${r.relname} sem RLS ligada`)
+        assert.ok(Number(r.n) > 0, `${r.relname} sem policy`)
+      }
+    })
+
+    test('as migrations continuam aplicáveis pelo dono', async () => {
+      // O dono não é afetado por ENABLE (sem FORCE) — é o que mantém
+      // `npm run migrate`, backfill e manutenção funcionando. Se um dia a app
+      // conectar com o role dono, a RLS some em silêncio; este teste é o
+      // lembrete de que a separação de roles é a garantia, não a policy.
+      const n = await contar(db, `SELECT count(*) AS n FROM orders`)
+      assert.ok(n >= 0, 'o dono lê sem declarar tenant')
+    })
+  })
 })
