@@ -228,12 +228,23 @@ async function fontesDeProducao(): Promise<string[]> {
 }
 
 describe('guardas da camada de acesso', () => {
-  test('`store_account` em SQL vive só em postgresOrderStore.ts', async () => {
-    const permitido = 'store/postgres/postgresOrderStore.ts'
+  test('`store_account` em SQL vive só onde foi decidido que vive', async () => {
+    // Dois arquivos, e cada um custou uma decisão explícita — que é o ponto
+    // desta guarda: acrescentar um terceiro deve doer.
+    //
+    //   postgresOrderStore.ts — o repositório. Leitura e escrita de pedido.
+    //   offboarding.ts        — o DELETE por loja da rotina de LGPD. Não cabe
+    //                           no repositório: apaga também tabelas de
+    //                           tenancy, roda com outro role e é operação
+    //                           administrativa, não caminho de aplicação.
+    const permitidos = [
+      'store/postgres/postgresOrderStore.ts',
+      'store/postgres/offboarding.ts',
+    ]
     const infratores: string[] = []
 
     for (const arquivo of await fontesDeProducao()) {
-      if (arquivo === permitido) continue
+      if (permitidos.includes(arquivo)) continue
       const src = await readFile(join(RAIZ, arquivo), 'utf8')
       // Só a forma SQL (snake_case). `storeAccount` em camelCase é o parâmetro
       // que atravessa a aplicação e pode aparecer em qualquer lugar.

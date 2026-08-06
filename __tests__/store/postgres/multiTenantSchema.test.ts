@@ -557,7 +557,7 @@ describe('schema multi-tenant', { skip: semBanco }, () => {
       }
     })
 
-    test('as migrations continuam aplicáveis pelo dono', async () => {
+    test('as migrations continuam aplicáveis pelo dono (marcador)', async () => {
       // O dono não é afetado por ENABLE (sem FORCE) — é o que mantém
       // `npm run migrate`, backfill e manutenção funcionando. Se um dia a app
       // conectar com o role dono, a RLS some em silêncio; este teste é o
@@ -565,5 +565,196 @@ describe('schema multi-tenant', { skip: semBanco }, () => {
       const n = await contar(db, `SELECT count(*) AS n FROM orders`)
       assert.ok(n >= 0, 'o dono lê sem declarar tenant')
     })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Offboarding (GUS-56) — a prova de que as linhas somem mesmo.
+  //
+  // NÃO usa `emTransacaoRevertida`: `offboardOrg` abre a própria transação, e
+  // aninhar pegaria outra conexão do pool. As fixtures são commitadas, a rotina
+  // roda de verdade, e o que sobra é limpo no fim.
+  // ---------------------------------------------------------------------------
+
+  describe('offboarding', () => {
+    const CONTA_SAI = 'off-loja-que-sai'
+    const CONTA_FICA = 'off-loja-vizinha'
+
+    async function montarOrg(conta: string): Promise<string> {
+      const org = await db.query<{ id: string }>(
+        `INSERT INTO organizations (name) VALUES ($1) RETURNING id`,
+        [`org ${conta}`]
+      )
+      const orgId = org.rows[0]!.id
+      await db.query(
+        `INSERT INTO vtex_accounts (org_id, account_name) VALUES ($1, $2)`,
+        [orgId, conta]
+      )
+      const user = await db.query<{ id: string }>(
+        `INSERT INTO users (clerk_user_id) VALUES ($1) RETURNING id`,
+        [`clerk-${conta}`]
+      )
+      await db.query(
+        `INSERT INTO memberships (user_id, org_id, role) VALUES ($1, $2, 'owner')`,
+        [user.rows[0]!.id, orgId]
+      )
+      for (const oid of ['p1', 'p2']) {
+        await db.query(
+          `INSERT INTO orders (store_account, order_id, created_at, status,
+                               raw_status, total_minor, currency)
+           VALUES ($1, $2, now(), 'paid', 'invoiced', 5000, 'BRL')`,
+          [conta, oid]
+        )
+        await db.query(
+          `INSERT INTO order_items (store_account, order_id, line_no, sku_id,
+                                    product_id, name, quantity, unit_paid_minor)
+           VALUES ($1, $2, 0, 's1', 'prod1', 'Item', 1, 5000)`,
+          [conta, oid]
+        )
+      }
+      await db.query(
+        `INSERT INTO sync_state (store_account, last_synced_at)
+         VALUES ($1, now())`,
+        [conta]
+      )
+      return orgId
+    }
+
+    async function contarLoja(conta: string) {
+      const q = async (sql: string) => contar(db, sql, [conta])
+      return {
+        orders: await q(`SELECT count(*) AS n FROM orders WHERE store_account = $1`),
+        items: await q(`SELECT count(*) AS n FROM order_items WHERE store_account = $1`),
+        sync: await q(`SELECT count(*) AS n FROM sync_state WHERE store_account = $1`),
+        contas: await q(`SELECT count(*) AS n FROM vtex_accounts WHERE account_name = $1`),
+      }
+    }
+
+    async function limpar(orgIds: string[], contas: string[]): Promise<void> {
+      for (const c of contas) {
+        await db.query(`DELETE FROM order_items WHERE store_account = $1`, [c])
+        await db.query(`DELETE FROM orders WHERE store_account = $1`, [c])
+        await db.query(`DELETE FROM sync_state WHERE store_account = $1`, [c])
+      }
+      for (const o of orgIds) {
+        await db.query(`DELETE FROM vtex_accounts WHERE org_id = $1`, [o])
+        await db.query(`DELETE FROM memberships WHERE org_id = $1`, [o])
+        await db.query(`DELETE FROM organizations WHERE id = $1`, [o])
+      }
+      await db.query(`DELETE FROM users WHERE clerk_user_id LIKE 'clerk-off-%'`)
+    }
+
+    test('apaga tudo da org e não encosta na vizinha', async () => {
+      const { offboardOrg } = await import('../../../store/postgres/offboarding')
+      const orgSai = await montarOrg(CONTA_SAI)
+      const orgFica = await montarOrg(CONTA_FICA)
+
+      try {
+        const antesVizinha = await contarLoja(CONTA_FICA)
+        assert.deepEqual(antesVizinha, { orders: 2, items: 2, sync: 1, contas: 1 })
+
+        const r = await offboardOrg(db, orgSai)
+
+        assert.equal(r.storeAccount, CONTA_SAI)
+        assert.equal(r.counts.orders, 2)
+        assert.equal(r.counts.order_items, 2)
+        assert.equal(r.counts.sync_state, 1)
+        assert.equal(r.counts.organizations, 1)
+
+        assert.deepEqual(
+          await contarLoja(CONTA_SAI),
+          { orders: 0, items: 0, sync: 0, contas: 0 },
+          'sobrou dado da org apagada'
+        )
+        const org = await contar(
+          db,
+          `SELECT count(*) AS n FROM organizations WHERE id = $1`,
+          [orgSai]
+        )
+        assert.equal(org, 0)
+
+        assert.deepEqual(
+          await contarLoja(CONTA_FICA),
+          antesVizinha,
+          'a org vizinha mudou de contagem — o filtro por loja vazou'
+        )
+        const vizinhaViva = await contar(
+          db,
+          `SELECT count(*) AS n FROM memberships WHERE org_id = $1`,
+          [orgFica]
+        )
+        assert.equal(vizinhaViva, 1)
+      } finally {
+        await limpar([orgSai, orgFica], [CONTA_SAI, CONTA_FICA])
+      }
+    })
+
+    test('dry-run conta certo e não apaga nada', async () => {
+      const { offboardOrg } = await import('../../../store/postgres/offboarding')
+      const orgId = await montarOrg(CONTA_SAI)
+      try {
+        const r = await offboardOrg(db, orgId, { dryRun: true })
+        assert.equal(r.counts.orders, 2)
+        assert.deepEqual(
+          await contarLoja(CONTA_SAI),
+          { orders: 2, items: 2, sync: 1, contas: 1 },
+          'dry-run apagou de verdade'
+        )
+      } finally {
+        await limpar([orgId], [CONTA_SAI])
+      }
+    })
+
+    // Critério 4 da GUS-56: medir com volume de loja real. Opt-in porque semear
+    // dezenas de milhares de linhas demora — e um teste lento que roda sempre
+    // vira um teste que alguém desliga.
+    //
+    //   OFFBOARD_BENCH=50000 TEST_DATABASE_URL=... npm test
+    const bench = Number(process.env.OFFBOARD_BENCH ?? 0)
+    test(
+      'tempo de execução com volume de loja real',
+      { skip: bench > 0 ? false : 'defina OFFBOARD_BENCH=50000 para medir' },
+      async () => {
+        const { offboardOrg } = await import('../../../store/postgres/offboarding')
+        const conta = 'off-bench'
+        const org = await db.query<{ id: string }>(
+          `INSERT INTO organizations (name) VALUES ('bench') RETURNING id`
+        )
+        const orgId = org.rows[0]!.id
+        await db.query(
+          `INSERT INTO vtex_accounts (org_id, account_name) VALUES ($1, $2)`,
+          [orgId, conta]
+        )
+        try {
+          // generate_series em vez de N inserts: semear não é o que se mede.
+          await db.query(
+            `INSERT INTO orders (store_account, order_id, created_at, status,
+                                 raw_status, total_minor, currency)
+             SELECT $1, 'o' || i, now() - (i || ' minutes')::interval,
+                    'paid', 'invoiced', 1000, 'BRL'
+               FROM generate_series(1, $2) AS i`,
+            [conta, bench]
+          )
+          await db.query(
+            `INSERT INTO order_items (store_account, order_id, line_no, sku_id,
+                                      product_id, name, quantity, unit_paid_minor)
+             SELECT $1, 'o' || i, 0, 's', 'p', 'Item', 1, 1000
+               FROM generate_series(1, $2) AS i`,
+            [conta, bench]
+          )
+
+          const t0 = Date.now()
+          const r = await offboardOrg(db, orgId)
+          const ms = Date.now() - t0
+
+          console.log(
+            `[bench] offboarding de ${r.counts.orders} pedidos + ` +
+              `${r.counts.order_items} itens: ${ms} ms`
+          )
+          assert.equal(r.counts.orders, bench)
+        } finally {
+          await limpar([orgId], [conta])
+        }
+      }
+    )
   })
 })
