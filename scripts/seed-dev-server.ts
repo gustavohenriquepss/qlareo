@@ -14,6 +14,7 @@
  * -----------------------------------------------------------------------------
  */
 import { createApp } from '../server/main'
+import { preAuthTenantResolver } from '../server/preAuthTenant'
 import { MemoryOrderStore } from '../store/memoryStore'
 import { type CanonicalOrder } from '../core'
 
@@ -181,7 +182,7 @@ async function main() {
     apiKey: process.env.QLAREO_API_KEY ?? 'chave-de-teste-local',
   }
 
-  createApp(config, store).listen(config.port, () => {
+  createApp(config, store, preAuthTenantResolver(ACCOUNT)).listen(config.port, () => {
     console.log(
       `[seed] ${pedidos.length} pedidos em memória; servidor em :${config.port}`
     )
