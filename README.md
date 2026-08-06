@@ -275,6 +275,44 @@ Dois detalhes operacionais que sustentam o desenho:
   solto. O `true` do `set_config` prende o valor à transação; fora dela, ficaria
   na conexão e vazaria para a próxima requisição que pegasse a mesma do pool.
 
+## Exclusão de dados (LGPD)
+
+**Não existe botão de exclusão na interface do lojista, e isso é decisão, não
+lacuna.** O pedido chega pelos canais de suporte e a execução é do operador, com
+acesso ao banco. Uma exclusão em massa disparada por clique é irreversível e não
+tem etapa de conferência; esta tem.
+
+Quando um titular pede exclusão, a rotina é `npm run offboard`. **Sempre em duas
+etapas** — a primeira não apaga nada:
+
+```bash
+# 1. o que sumiria (números exatos, transação revertida)
+DATABASE_URL=... npm run offboard -- --org=<uuid> --dry-run
+
+# 2. executar
+DATABASE_URL=... npm run offboard -- --org=<uuid> --confirmo-que-apaga
+```
+
+Rode com o **role dono** das tabelas, o mesmo do `npm run migrate` — a migration
+`005` dá apenas `SELECT` ao role da aplicação nas tabelas de tenancy.
+
+Tudo numa transação: ou apaga completo, ou não apaga nada. **Uma org apagada
+pela metade é pior que uma org não apagada** — sobra dado pessoal órfão que
+ninguém mais alcança pela interface e que, portanto, ninguém revisa nem apaga
+depois.
+
+A ordem é `order_items → orders → sync_state → vtex_accounts → memberships →
+organizations`, e o primeiro passo não apaga: **lê** `vtex_accounts` para
+descobrir o `store_account`. As tabelas de dados são indexadas por
+`store_account`, não por `org_id`, e essa linha é a única ponte entre os dois —
+apagá-la antes dos pedidos deixaria os pedidos presentes no banco e
+inalcançáveis por qualquer chave. Há um teste fixando essa ordem, porque um
+comentário não sobrevive a um refactor.
+
+**O usuário não é apagado**, só o vínculo: ele pode ser membro de outras orgs
+(agência, multi-marca). Apagar a conta de uma pessoa é outro pedido, de outro
+titular.
+
 ## Privacidade — a diferença que importa neste modelo
 
 Ser standalone **inverte a postura de privacidade** do app VTEX IO, e isso é
