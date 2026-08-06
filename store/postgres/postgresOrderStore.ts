@@ -63,10 +63,39 @@ export class PostgresOrderStore implements OrderStore {
     this.db = db
   }
 
+  /**
+   * Abre transação, declara a loja para a RLS (005_rls.sql) e roda `fn`.
+   *
+   * TODA operação passa por aqui, inclusive as de leitura — que antes usavam
+   * `this.db.query` solto. O motivo é o `true` do `set_config`: ele prende o
+   * ajuste à TRANSAÇÃO. Sem transação, o valor ficaria na conexão e vazaria para
+   * a próxima requisição que pegasse a mesma do pool — dois lojistas, uma
+   * conexão reciclada, e o segundo lê os dados do primeiro.
+   *
+   * `set_config` e não `SET LOCAL`: comandos SET não aceitam parâmetro de bind,
+   * e montar o SET por concatenação colocaria um valor externo dentro do texto
+   * do comando. Aqui o valor vai em $1, como todo o resto deste arquivo.
+   *
+   * O custo é um BEGIN/COMMIT por leitura. É o preço da rede de segurança — e o
+   * filtro explícito `WHERE store_account = $1` continua em toda query, porque
+   * a RLS é a segunda tranca, não a primeira.
+   */
+  private async withTenant<T>(
+    storeAccount: string,
+    fn: (tx: SqlClient) => Promise<T>
+  ): Promise<T> {
+    return this.db.transaction(async (tx) => {
+      await tx.query(`SELECT set_config('qlareo.store_account', $1, true)`, [
+        storeAccount,
+      ])
+      return fn(tx)
+    })
+  }
+
   async upsertOrders(storeAccount: string, orders: CanonicalOrder[]): Promise<void> {
     if (orders.length === 0) return
 
-    await this.db.transaction(async (tx) => {
+    await this.withTenant(storeAccount, async (tx) => {
       for (const order of orders) {
         const hasItems = order.items !== undefined
 
@@ -161,74 +190,80 @@ export class PostgresOrderStore implements OrderStore {
   async getOrders(query: OrderQuery): Promise<CanonicalOrder[]> {
     const { storeAccount, range, withItems } = query
 
-    const res = await this.db.query<OrderRow>(
-      `SELECT order_id, created_at, status, raw_status, total_minor, currency,
-              payment_method, seller_name, customer_email,
-              shipping_state, shipping_city, coupon, utm_source, utm_campaign
-         FROM orders
-        WHERE store_account = $1
-          AND created_at >= $2
-          AND created_at <= $3
-        ORDER BY created_at, order_id`,
-      [storeAccount, range.start, range.end]
-    )
+    return this.withTenant(storeAccount, async (tx) => {
+      const res = await tx.query<OrderRow>(
+        `SELECT order_id, created_at, status, raw_status, total_minor, currency,
+                payment_method, seller_name, customer_email,
+                shipping_state, shipping_city, coupon, utm_source, utm_campaign
+           FROM orders
+          WHERE store_account = $1
+            AND created_at >= $2
+            AND created_at <= $3
+          ORDER BY created_at, order_id`,
+        [storeAccount, range.start, range.end]
+      )
 
-    const orders: CanonicalOrder[] = res.rows.map((row) => this.mapOrder(row))
+      const orders: CanonicalOrder[] = res.rows.map((row) => this.mapOrder(row))
 
-    if (!withItems) return orders
+      if (!withItems) return orders
 
-    // Segundo SELECT dos itens, filtrado pela MESMA janela via JOIN em orders —
-    // continua preso ao tenant ($1) e à faixa de data. Ordenado por order_id,
-    // line_no para reconstruir a ordem original do pedido.
-    const itemsRes = await this.db.query<ItemRow>(
-      `SELECT i.order_id, i.line_no, i.sku_id, i.product_id, i.name,
-              i.quantity, i.unit_paid_minor, i.unit_list_minor
-         FROM order_items i
-         JOIN orders o
-           ON o.store_account = i.store_account
-          AND o.order_id = i.order_id
-        WHERE i.store_account = $1
-          AND o.created_at >= $2
-          AND o.created_at <= $3
-        ORDER BY i.order_id, i.line_no`,
-      [storeAccount, range.start, range.end]
-    )
+      // Segundo SELECT dos itens, filtrado pela MESMA janela via JOIN em orders
+      // — continua preso ao tenant ($1) e à faixa de data. Ordenado por
+      // order_id, line_no para reconstruir a ordem original do pedido.
+      const itemsRes = await tx.query<ItemRow>(
+        `SELECT i.order_id, i.line_no, i.sku_id, i.product_id, i.name,
+                i.quantity, i.unit_paid_minor, i.unit_list_minor
+           FROM order_items i
+           JOIN orders o
+             ON o.store_account = i.store_account
+            AND o.order_id = i.order_id
+          WHERE i.store_account = $1
+            AND o.created_at >= $2
+            AND o.created_at <= $3
+          ORDER BY i.order_id, i.line_no`,
+        [storeAccount, range.start, range.end]
+      )
 
-    const byOrder = new Map<string, CanonicalItem[]>()
-    for (const row of itemsRes.rows) {
-      const list = byOrder.get(row.order_id) ?? []
-      list.push(this.mapItem(row))
-      byOrder.set(row.order_id, list)
-    }
+      const byOrder = new Map<string, CanonicalItem[]>()
+      for (const row of itemsRes.rows) {
+        const list = byOrder.get(row.order_id) ?? []
+        list.push(this.mapItem(row))
+        byOrder.set(row.order_id, list)
+      }
 
-    for (const order of orders) {
-      order.items = byOrder.get(order.orderId) ?? []
-    }
+      for (const order of orders) {
+        order.items = byOrder.get(order.orderId) ?? []
+      }
 
-    return orders
+      return orders
+    })
   }
 
   async getSyncState(storeAccount: string): Promise<Date | null> {
-    const res = await this.db.query<{ last_synced_at: string | Date | null }>(
-      `SELECT last_synced_at FROM sync_state WHERE store_account = $1`,
-      [storeAccount]
-    )
-    const row = res.rows[0]
-    if (!row || row.last_synced_at === null) return null
-    return row.last_synced_at instanceof Date
-      ? row.last_synced_at
-      : new Date(row.last_synced_at)
+    return this.withTenant(storeAccount, async (tx) => {
+      const res = await tx.query<{ last_synced_at: string | Date | null }>(
+        `SELECT last_synced_at FROM sync_state WHERE store_account = $1`,
+        [storeAccount]
+      )
+      const row = res.rows[0]
+      if (!row || row.last_synced_at === null) return null
+      return row.last_synced_at instanceof Date
+        ? row.last_synced_at
+        : new Date(row.last_synced_at)
+    })
   }
 
   async setSyncState(storeAccount: string, lastSyncedAt: Date): Promise<void> {
-    await this.db.query(
-      `INSERT INTO sync_state (store_account, last_synced_at, updated_at)
-       VALUES ($1, $2, now())
-       ON CONFLICT (store_account) DO UPDATE SET
-         last_synced_at = EXCLUDED.last_synced_at,
-         updated_at     = now()`,
-      [storeAccount, lastSyncedAt]
-    )
+    await this.withTenant(storeAccount, async (tx) => {
+      await tx.query(
+        `INSERT INTO sync_state (store_account, last_synced_at, updated_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (store_account) DO UPDATE SET
+           last_synced_at = EXCLUDED.last_synced_at,
+           updated_at     = now()`,
+        [storeAccount, lastSyncedAt]
+      )
+    })
   }
 
   private mapOrder(row: OrderRow): CanonicalOrder {

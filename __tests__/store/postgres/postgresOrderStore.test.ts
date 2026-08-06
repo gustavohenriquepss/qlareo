@@ -282,3 +282,73 @@ describe('mapeamento linha->CanonicalOrder', () => {
     assert.equal(order.items![1].unitListMinor, undefined) // NULL -> undefined
   })
 })
+
+// -----------------------------------------------------------------------------
+// Declaração de tenant para a RLS (005_rls.sql).
+//
+// Sem banco não dá para provar que a policy nega — isso está nos testes gated de
+// multiTenantSchema.test.ts. Dá para provar o que é responsabilidade DESTE
+// arquivo: que a declaração sai, que sai PARAMETRIZADA, e que sai como PRIMEIRA
+// instrução dentro da transação. Uma declaração emitida depois da primeira query
+// deixaria essa query correndo sem tenant declarado.
+// -----------------------------------------------------------------------------
+
+const SET_CONFIG = /set_config\('qlareo\.store_account'/
+
+describe('declaração de tenant para a RLS', () => {
+  const casos: [string, (s: PostgresOrderStore) => Promise<unknown>][] = [
+    ['getOrders', (s) => s.getOrders({ storeAccount: STORE, range: RANGE })],
+    ['getSyncState', (s) => s.getSyncState(STORE)],
+    ['setSyncState', (s) => s.setSyncState(STORE, new Date('2026-01-31T00:00:00Z'))],
+    ['upsertOrders', (s) => s.upsertOrders(STORE, [makeOrder()])],
+  ]
+
+  for (const [nome, executar] of casos) {
+    test(`${nome} declara o tenant antes de qualquer outra query`, async () => {
+      const sql = new FakeSql()
+      await executar(new PostgresOrderStore(sql))
+
+      const primeira = sql.calls[0]
+      assert.ok(primeira, `${nome} não emitiu query nenhuma`)
+      assert.match(
+        primeira!.text,
+        SET_CONFIG,
+        `${nome}: a primeira instrução da transação tem que ser a declaração ` +
+          'do tenant — qualquer query antes dela roda sem tenant declarado'
+      )
+      assert.deepEqual(
+        primeira!.params,
+        [STORE],
+        'o valor tem que ir em $1; concatenar no texto do SET é injeção'
+      )
+    })
+  }
+
+  test('a declaração é LOCAL — presa à transação, não à conexão', async () => {
+    const sql = new FakeSql()
+    await new PostgresOrderStore(sql).getSyncState(STORE)
+
+    // Terceiro argumento `true` de set_config = is_local. Sem ele o ajuste fica
+    // na CONEXÃO e vaza para a próxima requisição que pegar a mesma do pool:
+    // dois lojistas, uma conexão reciclada, e o segundo lê os dados do primeiro.
+    assert.match(
+      sql.calls[0]!.text.replace(/\s+/g, ' '),
+      /set_config\('qlareo\.store_account', \$1, true\)/,
+      'set_config sem is_local=true vaza o tenant entre requisições'
+    )
+  })
+
+  test('nenhuma query escapa da transação', async () => {
+    // FakeSql.transaction repassa a si mesmo, então `calls` mistura os dois
+    // caminhos. O que dá para afirmar: nada é emitido ANTES da declaração, em
+    // nenhum dos métodos — que é o mesmo que dizer que nada roda fora.
+    const sql = new FakeSql()
+    const store = new PostgresOrderStore(sql)
+
+    await store.getOrders({ storeAccount: STORE, range: RANGE, withItems: true })
+
+    const declaracoes = sql.calls.filter((c) => SET_CONFIG.test(c.text))
+    assert.equal(declaracoes.length, 1, 'uma declaração por transação')
+    assert.equal(sql.calls.indexOf(declaracoes[0]!), 0)
+  })
+})
