@@ -1,5 +1,5 @@
 /**
- * Testes do schema multi-tenant (003_multi_tenant.sql).
+ * Testes do schema multi-tenant (003_multi_tenant.sql, 004_vtex_accounts.sql).
  * -----------------------------------------------------------------------------
  * Divididos em dois blocos, com honestidade sobre o que cada um prova:
  *
@@ -275,6 +275,142 @@ describe('schema multi-tenant', { skip: semBanco }, () => {
         () => criarUser(tx, 'user_repetido'),
         /duplicate key|unique/i
       )
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // 004_vtex_accounts.sql
+  // ---------------------------------------------------------------------------
+
+  describe('vtex_accounts', () => {
+    async function criarConta(
+      tx: SqlClient,
+      orgId: string,
+      accountName: string
+    ): Promise<string> {
+      const res = await tx.query<{ id: string }>(
+        `INSERT INTO vtex_accounts (org_id, account_name) VALUES ($1, $2)
+         RETURNING id`,
+        [orgId, accountName]
+      )
+      return res.rows[0]!.id
+    }
+
+    test('uma org tem no máximo uma conta VTEX', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        const orgId = await criarOrg(tx, 'Loja 1a1')
+        await criarConta(tx, orgId, 'lojaum')
+
+        await assert.rejects(
+          () => criarConta(tx, orgId, 'lojadois'),
+          /duplicate key|unique/i,
+          'UNIQUE (org_id) é o que materializa o 1:1'
+        )
+      })
+    })
+
+    test('duas orgs não podem apontar para a mesma conta VTEX', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        const orgA = await criarOrg(tx, 'Org A')
+        const orgB = await criarOrg(tx, 'Org B')
+        await criarConta(tx, orgA, 'lojacompartilhada')
+
+        await assert.rejects(
+          () => criarConta(tx, orgB, 'lojacompartilhada'),
+          /duplicate key|unique/i,
+          'sem UNIQUE global, as duas orgs leriam os mesmos pedidos e o RLS ' +
+            'não pegaria — ambas estariam autorizadas ao mesmo store_account'
+        )
+      })
+    })
+
+    test('apagar a org apaga a conta', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        const orgId = await criarOrg(tx, 'Loja Encerrada')
+        await criarConta(tx, orgId, 'lojaencerrada')
+
+        await tx.query(`DELETE FROM organizations WHERE id = $1`, [orgId])
+
+        const n = await contar(
+          tx,
+          `SELECT count(*) AS n FROM vtex_accounts WHERE org_id = $1`,
+          [orgId]
+        )
+        assert.equal(n, 0)
+      })
+    })
+
+    test('a credencial nasce inteiramente NULL', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        const orgId = await criarOrg(tx, 'Loja Nova')
+        await criarConta(tx, orgId, 'lojanova')
+
+        const res = await tx.query<Record<string, unknown>>(
+          `SELECT app_key_ciphertext, app_token_ciphertext, dek_wrapped,
+                  kek_alias, key_version
+             FROM vtex_accounts WHERE org_id = $1`,
+          [orgId]
+        )
+        for (const [col, valor] of Object.entries(res.rows[0]!)) {
+          assert.equal(valor, null, `${col} deveria nascer NULL (Fase 4 preenche)`)
+        }
+      })
+    })
+
+    test('credencial pela metade é rejeitada — cofre sem a chave do cofre', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        const orgId = await criarOrg(tx, 'Loja Meia')
+        const contaId = await criarConta(tx, orgId, 'lojameia')
+
+        await assert.rejects(
+          () =>
+            tx.query(
+              `UPDATE vtex_accounts
+                  SET app_key_ciphertext = $1, app_token_ciphertext = $1
+                WHERE id = $2`,
+              [Buffer.from('cifrado'), contaId]
+            ),
+          /check constraint/i,
+          'ciphertext sem dek_wrapped é credencial perdida em silêncio'
+        )
+      })
+    })
+
+    test('credencial completa é aceita', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        const orgId = await criarOrg(tx, 'Loja Cheia')
+        const contaId = await criarConta(tx, orgId, 'lojacheia')
+
+        const res = await tx.query(
+          `UPDATE vtex_accounts
+              SET app_key_ciphertext = $1, app_token_ciphertext = $1,
+                  dek_wrapped = $1, kek_alias = $2, key_version = 1
+            WHERE id = $3`,
+          [Buffer.from('cifrado'), 'alias/qlareo-prod', contaId]
+        )
+        assert.equal(res.rowCount, 1)
+      })
+    })
+
+    test('pedido sem vtex_accounts correspondente é ACEITO (não há FK)', async () => {
+      await emTransacaoRevertida(async (tx) => {
+        // Fixa a decisão registrada em 004_vtex_accounts.sql. Se alguém
+        // adicionar a FK orders.store_account -> vtex_accounts.account_name,
+        // este teste quebra e o comentário da migration explica a escolha.
+        await tx.query(
+          `INSERT INTO orders (store_account, order_id, created_at, status,
+                               raw_status, total_minor, currency)
+           VALUES ($1, $2, now(), 'paid', 'invoiced', 1000, 'BRL')`,
+          ['conta-sem-org', 'ORD-ORFAO-1']
+        )
+
+        const n = await contar(
+          tx,
+          `SELECT count(*) AS n FROM orders WHERE store_account = $1`,
+          ['conta-sem-org']
+        )
+        assert.equal(n, 1, 'o sync e o seed gravam antes de existir org')
+      })
     })
   })
 })
