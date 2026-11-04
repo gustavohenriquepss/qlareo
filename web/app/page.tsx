@@ -1,27 +1,23 @@
+import { Logo } from "@/components/Logo";
+
 /**
- * `/` não é mais uma tela: Vendas virou uma seção com três recortes, e a raiz
- * manda para o primeiro deles.
- *
- * Redirecionar em vez de duplicar a página em `/` e `/vendas` porque duas URLs
- * mostrando a mesma coisa quebram o estado ativo da navegação e produzem
- * favoritos que divergem na próxima mudança.
- *
- * A query string viaja junto: um link antigo para `/?from=…&to=…` continua
- * abrindo o mesmo período. Perder o filtro no redirect seria pior que não
- * redirecionar.
+ * Placeholder até o painel do anunciante existir. Não é uma tela de produto:
+ * só garante que o deploy de `app.qlareo.com` responde e leva quem caiu aqui
+ * para a landing.
  */
-import { redirect } from "next/navigation";
-
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const qs = new URLSearchParams();
-  for (const [key, value] of Object.entries(await searchParams)) {
-    if (typeof value === "string") qs.set(key, value);
-    else if (Array.isArray(value) && value[0] !== undefined) qs.set(key, value[0]);
-  }
-
-  redirect(qs.size > 0 ? `/vendas?${qs}` : "/vendas");
+export default function HomePage() {
+  return (
+    <main className="flex flex-1 flex-col items-center justify-center gap-6 px-4 text-center">
+      <Logo className="h-8 w-auto text-ink" />
+      <p className="max-w-sm text-ink-secondary">
+        O painel do anunciante está chegando.
+      </p>
+      <a
+        href="https://qlareo.com"
+        className="control text-sm font-medium text-primary underline-offset-4 hover:underline"
+      >
+        Conheça a Qlareo
+      </a>
+    </main>
+  );
 }

@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // O repositório tem dois package-lock.json (a raiz, que roda TypeScript sem
-  // build, e este app Next). Sem isto o Turbopack elege a raiz como workspace
-  // root e avisa a cada build. O app web é auto-contido: sua raiz é esta pasta.
+  // O app Next mora em `web/`, não na raiz do repositório. Fixar a raiz evita
+  // que o Turbopack eleja um package-lock.json de uma pasta acima como
+  // workspace root (e avise a cada build).
   turbopack: {
     root: __dirname,
   },

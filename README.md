@@ -1,336 +1,85 @@
-# QLAREO
+# Qlareo — app
 
-Relatórios de vendas simples e confiáveis para lojistas **VTEX**, como
-**aplicação standalone** — um serviço próprio que consulta a Orders API da loja,
-guarda os pedidos em Postgres e entrega, numa interface web, os relatórios que
-respondem "como foi a venda":
+O app da Qlareo, em `app.qlareo.com`. A landing page (`qlareo.com`) fica em outro
+repositório: [`gustavohenriquepss/qlareo-LP`](https://github.com/gustavohenriquepss/qlareo-LP).
 
-| Relatório | Responde |
-|---|---|
-| **Vendas por período** | Faturamento, pedidos e ticket médio por dia/semana/mês; por pagamento e por seller |
-| **Novos vs. recorrentes** | Clientes de primeira compra vs. repetidos e taxa de recompra |
-| **Top produtos + Curva ABC** | Quais produtos concentram a receita, com classe A/B/C |
-| **Produtos vendidos** | TODOS os produtos com venda no período, com os SKUs de cada um indentados: qual tamanho encalha e qual vive em ruptura |
-| **Efetividade de promoções** | Quanto de receita andou com desconto e quanto o desconto custou |
-| **Vendas por região** | Para qual UF a loja vende, com ticket médio e participação |
-| **Cupons e origem** | Qual cupom e qual campanha geraram receita — o "por quê" das promoções |
-| **Pedidos cancelados** | Taxa de cancelamento, valor que não entrou, e por qual situação e pagamento |
+## O produto
 
-> **Relação com o app VTEX IO.** Existe também uma versão deste produto como
-> [app nativo de Admin VTEX IO](https://github.com/gustavohenriquepss/vtex-sales-reports)
-> — instalável via `vtex link`, sem servidor e sem custódia de credencial. O
-> QLAREO é o **produto standalone**: roda como serviço próprio, o que remove os
-> tetos da plataforma (ver abaixo) ao custo de assumir a operação. O motor de
-> relatórios (`core/`) e o adapter VTEX foram extraídos daquele repositório.
+A Qlareo é uma **rede de mídia em sacolas de delivery**.
 
-## Por que standalone (o que se ganha)
+- Restaurantes recebem sacolas de papel kraft impressas **de graça**.
+- Anunciantes locais pagam para aparecer nelas, **100% antecipado**.
+- Dois planos: **Impacto** (um anunciante, sacola inteira, frente e verso) e **Alcance**
+  (um anunciante por lado, o outro lado é de alguém que não concorre). Na landing o id
+  continua `exclusiva` e `meia`.
+- Restaurante não divide sacola com concorrente: comida, bebida e app de delivery não
+  anunciam, e o restaurante vê cada arte antes.
+- Piloto em **Itaboraí** e **Icaraí, Niterói** (RJ).
 
-Rodar como serviço próprio, com banco local, remove as duas limitações que o app
-VTEX IO precisa declarar como intrínsecas:
+A landing vende. A conversa comercial acontece no WhatsApp do fundador.
 
-- **Sem o teto de pedidos por consulta** nos relatórios de item: o `sync` paga o
-  custo de puxar (e enriquecer) da API uma vez e grava no banco; os relatórios
-  leem do banco, baratos.
-- **Sem a janela de ~24 meses**: uma vez armazenado, o histórico acumula além do
-  que a API mostra. Com o tempo, "novos vs. recorrentes" fica mais correto que o
-  próprio Admin.
+## O que este repositório vai ter
 
-**Estado atual:** o banco (PostgreSQL) já existe. Os relatórios leem do store
-(`DATABASE_URL` presente → Postgres; ausente → memória, para dev/demo). O `sync`
-popula o store a partir da VTEX. E existe um **front-end Next.js** (`web/`) que
-consome a API: as quatro telas, com filtros linkáveis, gráficos e exportação
-CSV. O que ainda é roadmap: sync **incremental** via Orders Feed (hoje o sync
-busca um intervalo por vez) — a marca d'água (`sync_state`) já está no schema
-para isso.
+Definido pela landing (ver o ADR-003 dela):
 
-## Arquitetura
+- **Redirect dos QR codes**, `/r/:slug`, com contagem de leituras. Cada sacola leva um
+  QR do anunciante; a leitura passa por aqui antes de seguir para o destino dele.
+- **Painel do anunciante**, onde ele acompanha a própria campanha.
 
-**Ports & adapters.** O motor de relatórios não conhece VTEX; a plataforma entra
-por uma porta.
-
-```
-qlareo/
-├── core/              # ── AGNÓSTICO DE PLATAFORMA ──
-│   ├── types.ts       # modelo canônico de pedido (a fronteira)
-│   ├── adapter.ts     # interface PlatformAdapter (a porta)
-│   ├── reports.ts     # os relatórios
-│   └── scope|money|time.ts
-├── adapters/vtex/     # ── ESPECÍFICO DA VTEX ──
-│   ├── mapper.ts      # formato cru da OMS → canônico
-│   └── orders.ts      # paginação + fatiamento do teto de 3.000
-├── transport/
-│   └── fetchHttpClient.ts   # Orders API via fetch + appKey/appToken
-├── store/             # ── PERSISTÊNCIA ──
-│   ├── orderStore.ts  # a porta (interface OrderStore)
-│   ├── memoryStore.ts # impl em memória (dev/teste)
-│   ├── sync.ts        # adapter → store
-│   ├── sql.ts         # porta SqlClient (isola o driver pg)
-│   └── postgres/      # impl Postgres (isolada; único lugar com `pg`)
-├── db/migrations/     # schema versionado (*.sql)
-├── server/            # HTTP nativo: relatórios lêem do store
-├── scripts/           # sync e migrate (CLIs)
-├── __tests__/         # runner nativo do Node
-└── web/               # ── FRONT-END (Next.js, projeto npm à parte) ──
-    ├── app/           # uma rota por relatório (Server Components)
-    │   └── api/export/[key]/   # CSV como URL, não Blob no browser
-    ├── components/    # tabela, filtros, estados + charts/ (Recharts)
-    └── lib/           # api (server-only), filters (query string), csv, exports
-```
-
-Três fronteiras carregam o design:
-
-- **`transport/`** — o que muda entre o app IO e o standalone. No app, o
-  transporte é a sessão do admin; aqui é um par appKey/appToken. `core/` e
-  `adapters/vtex/` são idênticos aos do app.
-- **`store/`** — o que o banco adiciona. Os relatórios lêem da interface
-  `OrderStore`, não da API. O `sync` preenche o store a partir do adapter. A
-  implementação Postgres fica atrás da porta `SqlClient`, então o único arquivo
-  que importa o driver `pg` é `store/postgres/pgClient.ts`.
-- **`web/`** — projeto npm separado, que fala com o backend só por HTTP. Não
-  importa `core/` nem toca no banco: se a API muda, muda um cliente; e o
-  front-end pode ser implantado em outro lugar (ou trocado) sem mexer no motor.
-
-Fluxo: `sync` (VTEX → store) roda periodicamente; o servidor responde relatórios
-lendo do store; o `web/` renderiza esses relatórios no servidor Next. Isolamento de tenant é invariante — todo acesso ao store leva o
-`store_account` (single-tenant hoje, schema pronto para multi).
+Ainda não existe nada disso. Hoje `web/` é só a base: Next.js 16 (App Router),
+TypeScript, Tailwind CSS v4, o design system e a logo, com uma página de espera em `/`.
+O resto (modelo de dados, banco, autenticação, o que o painel mostra) está para ser
+decidido.
 
 ## Rodar
 
-São **dois processos**: o backend na raiz (porta 3000) e o front-end em `web/`
-(porta 3001). O backend requer **Node ≥ 22.18** (execução nativa de TypeScript;
-sem passo de build) e não tem dependência de runtime além do driver `pg`.
-
 ```bash
-# ── backend (raiz) ──
-cp .env.example .env      # preencha as credenciais VTEX
-
-npm run demo              # roda os 4 relatórios com dados sintéticos (sem VTEX)
-npm test                  # 204 testes, zero dependência externa
-
-# Os testes de schema e RLS exigem Postgres e ficam PULADOS sem esta variável:
-TEST_DATABASE_URL=postgres://qlareo:qlareo@localhost:5432/qlareo npm test
-
-# Com banco (produção-like):
-docker compose up -d      # sobe o Postgres local
-npm run migrate           # aplica db/migrations/*.sql
-npm run sync -- --from=2026-01-01 --to=2026-01-31 --items   # VTEX → banco
-npm start                 # API em http://localhost:3000
-```
-
-> **A migration `002_order_attribution` exige um re-sync.** Ela adiciona UF,
-> cidade, cupom e UTM — campos que vêm do mesmo Get Order dos itens — e, por
-> isso, **rebaixa `items_synced` de todo pedido já sincronizado**. O detalhe
-> desses pedidos foi buscado por um código que ainda não lia esses campos;
-> mantê-los marcados como sincronizados faria os relatórios reportarem a lacuna
-> como se fosse dado ("100% sem região"). Até rodar `npm run sync -- --items` de
-> novo, os cinco relatórios de detalhe (produtos, SKUs, promoções, região,
-> origem) respondem "não sincronizado" em vez de números — que é a resposta
-> correta, não a mais agradável.
-
-```bash
-# ── front-end (web/), noutro terminal ──
 cd web
-cp .env.example .env.local   # QLAREO_API_URL + a MESMA QLAREO_API_KEY do backend
 npm install
-npm run dev                  # interface em http://localhost:3001
+npm run dev          # http://localhost:3001
+npm run typecheck
+npm run lint
+npm run build
 ```
 
-O `web/` só sobe telas úteis com o backend de pé: cada página é um Server
-Component que busca da API a cada requisição (`cache: "no-store"` — relatório de
-vendas não serve número velho sem o usuário pedir). Com o backend fora do ar, a
-tela mostra o erro e o que fazer, em vez de uma página de erro genérica.
+## Design system
 
-O caminho Postgres foi verificado de ponta a ponta contra um Postgres 18 real,
-pelo código de produção (`createPgClient` → `PostgresOrderStore` → driver `pg`):
-`npm run migrate` aplica e é idempotente; upsert, JOIN de itens, preservação de
-detalhe no re-upsert, `sync_state` e isolamento de tenant conferem no banco; e o
-servidor em modo Postgres responde os relatórios lendo do banco. O SQL sozinho
-também tem um script de asserções em [`db/verify_store.sql`](db/verify_store.sql)
-(`psql -f db/verify_store.sql` num banco com as migrations aplicadas).
+`web/app/globals.css` é a **fonte da verdade** dos tokens da marca. A landing copia este
+arquivo, e `web/components/Logo.tsx` também, literalmente. Por isso:
 
-Sem `DATABASE_URL`, `npm start` sobe em **modo memória** (store vazio, sem
-Postgres) — útil para desenvolvimento. O driver `pg` já está no `package.json`;
-como o Postgres é carregado por `import()` dinâmico, o modo memória (e o
-`npm test`) nunca o importa.
+- **Mudança de token começa aqui** e desce para a landing (`qlareo-LP/app/globals.css`).
+  Não mude o valor de um token sem levar a mudança para lá também.
+- **Mantenha os caminhos.** O README da landing aponta para `qlareo/web/app/globals.css`
+  e para `Logo.tsx`.
+- `--primary` (`#1e40af`) pinta ação, `--brand` (`#2563eb`) é identidade. `BRAND_COLOR`
+  em `Logo.tsx` duplica `--brand` para o `apple-icon`, que roda fora do navegador.
+- Os tokens de gráfico (`--series-*`, `--abc-*`, `--grid`, `--axis`) vêm do produto
+  anterior e foram validados para daltonismo e contraste. Ficam até alguém decidir o que
+  o painel do anunciante desenha.
 
-### Credenciais
+## Arquivo
 
-O serviço consulta a loja com um par **appKey/appToken** gerado no Admin VTEX,
-com o papel **OMS - View order**. Configure por ambiente (nunca no código):
+O produto anterior (SaaS de relatórios de vendas para lojas VTEX: motor de relatórios,
+adapter VTEX, Postgres multi-tenant com RLS, rotina de exclusão LGPD e as telas em
+Next.js) está preservado fora do `main`.
 
-| Variável | Para quê |
-|---|---|
-| `VTEX_ACCOUNT` | nome da conta (subdomínio) |
-| `VTEX_APP_KEY` / `VTEX_APP_TOKEN` | credencial de leitura dos pedidos |
-| `QLAREO_API_KEY` | protege o endpoint do próprio QLAREO (`x-api-key`) |
-| `DATABASE_URL` | conexão Postgres; ausente → store em memória (dev) |
-| `PORT` | porta do servidor (default 3000) |
+| Onde | O que é |
+| --- | --- |
+| tag `legacy/relatorios-v1` | Snapshot imutável do último estado (commit `e82dd6e`). |
+| branch `archive/relatorios` | Mesmo commit, para abrir preview ou continuar dali. |
 
-E no `web/.env.local` (front-end):
-
-| Variável | Para quê |
-|---|---|
-| `QLAREO_API_URL` | onde o backend ouve (default `http://localhost:3000`) |
-| `QLAREO_API_KEY` | mesma chave do backend, mandada no `x-api-key` |
-
-**Sem prefixo `NEXT_PUBLIC_`, de propósito.** A chave é lida só em Server
-Components (`web/lib/api.ts`) e viaja numa chamada servidor→servidor; o browser
-recebe apenas números já renderizados. Com o prefixo, a chave iria no bundle e
-qualquer visitante leria o faturamento da loja.
-
-### API
-
-```
-GET /health
-GET /api/reports/sales-by-period?from=ISO&to=ISO&scope=liquido&grain=day
-GET /api/reports/new-vs-returning?from&to&scope
-GET /api/reports/top-products?from&to&scope
-GET /api/reports/top-skus?from&to&scope
-GET /api/reports/promotions?from&to&scope
-GET /api/reports/canceled-orders?from&to&grain
-GET /api/reports/sales-by-region?from&to&scope
-GET /api/reports/coupons-and-sources?from&to&scope
-```
-
-`scope` ∈ `bruto` | `liquido` | `todos`. Todas as rotas (menos `/health`) exigem
-o header `x-api-key` quando `QLAREO_API_KEY` está definido.
-
-**`canceled-orders` ignora `scope`**, e é a única rota que faz isso. O recorte
-existe para tirar cancelados do faturamento; aplicá-lo a um relatório *sobre*
-cancelados devolveria vazio sempre. Além disso a taxa de cancelamento precisa do
-total de pedidos do período como denominador, que um conjunto já filtrado não
-tem como informar. A interface esconde o controle de Recorte nessa tela, para
-não oferecer um filtro que a rota não obedece.
-
-## Interface (`web/`)
-
-Next.js 16 + React 19, Tailwind v4 e Recharts. Uma rota por relatório, com os
-recortes de vendas como sub-rotas:
-
-| Rota | Tela |
-|---|---|
-| `/vendas` | Faturamento, pedidos e ticket médio por dia/semana/mês |
-| `/vendas/pagamento`, `/vendas/seller` | os mesmos números, quebrados por meio de pagamento e por seller |
-| `/clientes` | Novos vs. recorrentes e taxa de recompra |
-| `/produtos` | Curva ABC por produto: quais concentram a receita |
-| `/produtos/skus` | Todos os produtos vendidos no período, com os SKUs de cada um indentados abaixo (sem ABC) |
-| `/promocoes` | Receita com desconto e custo do desconto |
-| `/regiao` | Faturamento por UF de entrega, com ticket médio e participação |
-| `/origem` | Faturamento por cupom, origem (utm_source) e campanha |
-| `/cancelados` | Pedidos e valor cancelados (só cancelamento concluído), taxa, por pagamento e a lista pedido a pedido |
-
-Três decisões que explicam a maior parte do código:
-
-- **Os filtros vivem na query string**, não em estado de componente. A tela de
-  relatório precisa ser linkável ("o mês passado no líquido" é um link que se
-  manda para um colega), o botão voltar precisa funcionar e o recorte precisa
-  sobreviver ao reload. Os links do menu carregam a query atual — trocar de
-  relatório não perde o período.
-- **Exportação CSV é uma URL** (`/api/export/:key?from&to&scope`), não um `Blob`
-  gerado no browser: funciona como link comum, aceita nova aba, entra no
-  gerenciador de downloads, é anunciada por leitor de tela e dá para agendar num
-  `curl`. O catálogo de colunas fica num registro único (`web/lib/exports.ts`) —
-  cabeçalho de CSV é contrato com a planilha de alguém.
-- **A tela mostra recorte; o arquivo traz o período inteiro.** A ABC desenha 12
-  barras, a tabela abre fechada — o CSV não herda nenhum desses limites, e não
-  leva linha de total nem preâmbulo de metadados (é o que faz o Excel errar as
-  colunas). Período e recorte vão no nome do arquivo.
-
-## Isolamento entre lojas — duas trancas, nesta ordem
-
-O QLAREO guarda pedidos de lojas diferentes nas mesmas tabelas, separados pela
-coluna `store_account`. Duas coisas impedem uma loja de ler a outra, e a ordem
-entre elas **não** é decorativa:
-
-**1. O filtro explícito é o mecanismo principal.** Toda query de
-`store/postgres/postgresOrderStore.ts` tem `WHERE store_account = $1`, sempre
-parametrizado, e o valor vem de `resolveTenant` (`server/tenant.ts`) — que o
-alcança através de `memberships ⋈ vtex_accounts`. Pedir a conta de uma org da
-qual o usuário não é membro devolve zero linhas: não existe checagem de
-permissão para alguém esquecer de fazer, porque a ausência do vínculo já é a
-negativa.
-
-**2. A RLS (`005_rls.sql`) é defesa em profundidade — a segunda tranca.** Cada
-transação declara a loja com
-`set_config('qlareo.store_account', $1, true)`, e as policies de `orders`,
-`order_items` e `sync_state` comparam a coluna com esse valor. Se ninguém
-declarar, `current_setting` devolve NULL, a comparação não é verdadeira e a
-policy nega tudo: **falha fechada**.
-
-> **A RLS não substitui o filtro explícito, e tratá-la como principal é o erro
-> que ela deveria evitar.** Quem confia só nela acaba com queries sem `WHERE` no
-> código e um único `set_config` errado entre elas e o vazamento. A RLS existe
-> para o dia em que alguém escrever uma query nova e esquecer o filtro — nesse
-> dia ela devolve zero linhas em vez da loja inteira.
-
-Dois detalhes operacionais que sustentam o desenho:
-
-- **A app não conecta com o role dono das tabelas.** `ENABLE ROW LEVEL SECURITY`
-  (sem `FORCE`) não se aplica ao dono — é essa assimetria que mantém
-  `npm run migrate` e manutenção funcionando enquanto a aplicação fica sujeita à
-  policy. Em produção, `DATABASE_URL` usa um usuário que herda `qlareo_app`
-  (sem `SUPERUSER`, sem `BYPASSRLS`); as migrations rodam com o dono. **Se a app
-  conectar com o role dono, a RLS some em silêncio.**
-- **Toda leitura abre transação**, inclusive as que antes eram um `SELECT`
-  solto. O `true` do `set_config` prende o valor à transação; fora dela, ficaria
-  na conexão e vazaria para a próxima requisição que pegasse a mesma do pool.
-
-## Exclusão de dados (LGPD)
-
-**Não existe botão de exclusão na interface do lojista, e isso é decisão, não
-lacuna.** O pedido chega pelos canais de suporte e a execução é do operador, com
-acesso ao banco. Uma exclusão em massa disparada por clique é irreversível e não
-tem etapa de conferência; esta tem.
-
-Quando um titular pede exclusão, a rotina é `npm run offboard`. **Sempre em duas
-etapas** — a primeira não apaga nada:
+Para recuperar:
 
 ```bash
-# 1. o que sumiria (números exatos, transação revertida)
-DATABASE_URL=... npm run offboard -- --org=<uuid> --dry-run
-
-# 2. executar
-DATABASE_URL=... npm run offboard -- --org=<uuid> --confirmo-que-apaga
+git checkout legacy/relatorios-v1                         # só olhar (HEAD destacado)
+git switch -c minha-branch legacy/relatorios-v1           # trabalhar a partir dele
+git checkout legacy/relatorios-v1 -- docs/adr             # trazer uma pasta para o main
 ```
 
-Rode com o **role dono** das tabelas, o mesmo do `npm run migrate` — a migration
-`005` dá apenas `SELECT` ao role da aplicação nas tabelas de tenancy.
-
-Tudo numa transação: ou apaga completo, ou não apaga nada. **Uma org apagada
-pela metade é pior que uma org não apagada** — sobra dado pessoal órfão que
-ninguém mais alcança pela interface e que, portanto, ninguém revisa nem apaga
-depois.
-
-A ordem é `order_items → orders → sync_state → vtex_accounts → memberships →
-organizations`, e o primeiro passo não apaga: **lê** `vtex_accounts` para
-descobrir o `store_account`. As tabelas de dados são indexadas por
-`store_account`, não por `org_id`, e essa linha é a única ponte entre os dois —
-apagá-la antes dos pedidos deixaria os pedidos presentes no banco e
-inalcançáveis por qualquer chave. Há um teste fixando essa ordem, porque um
-comentário não sobrevive a um refactor.
-
-**O usuário não é apagado**, só o vínculo: ele pode ser membro de outras orgs
-(agência, multi-marca). Apagar a conta de uma pessoa é outro pedido, de outro
-titular.
-
-## Privacidade — a diferença que importa neste modelo
-
-Ser standalone **inverte a postura de privacidade** do app VTEX IO, e isso é
-consciente, não acidental:
-
-- **O app IO não custodia nada**: usa a sessão do admin e nada é persistido.
-- **O QLAREO custodia credencial de terceiro.** O par appKey/appToken lê os
-  pedidos da loja. Consequências assumidas:
-  - Token **nunca** em código, log ou repositório — só em ambiente/segredo,
-    cifrado em repouso. O transporte jamais o coloca em URL.
-  - Com o banco, o serviço **armazena dados pessoais** (nome, e-mail, endereço
-    dos clientes da loja) e é **operador sob a LGPD** — exige base legal,
-    contrato de operador, política de retenção e resposta a incidente.
-
-Isso deixou de ser hipótese: rodando com `DATABASE_URL`, o `sync` persiste
-pedido e cliente. As obrigações acima valem a partir daí, e a decisão de operar
-assim é comercial — deve ser tomada de olhos abertos. (Sem `DATABASE_URL`, em
-modo memória, nada é persistido; mas isso é dev, não produção.)
+Talvez valha reaproveitar: o ADR de autenticação (`docs/adr/0001-auth-provider.md`,
+Supabase Auth vs Clerk), o desenho de `organizations`/`memberships` e o padrão de
+migrations em `db/migrations/`. Tudo isso estava amarrado à conta VTEX, então não volta
+como está.
 
 ## Licença
 
