@@ -10,9 +10,15 @@ A Qlareo é uma **rede de mídia em sacolas de delivery**. Este repositório é 
 - Comida, bebida e app de delivery não anunciam na rede; o restaurante vê cada arte antes.
 - Piloto em Itaboraí e Icaraí, Niterói (RJ).
 
-Este repositório vai abrigar o redirect dos QR codes (`/r/:slug`, com contagem de
-leituras) e o painel do anunciante. Nenhum dos dois existe ainda: `web/` é só a base
-Next.js com o design system.
+Este repositório abriga o redirect dos QR codes (`/r/:slug`, com contagem de leituras) e
+o painel do anunciante, onde ele acompanha as leituras e envia as artes. Stack: Next.js 16
+em `web/` + Supabase (Postgres, Auth, Storage). A ordem das fatias está no `README.md`.
+
+- **Isolamento é pela RLS.** O cadastro é aberto: toda tabela nova precisa de policy que
+  passe pelo vínculo em `advertiser_members` (ou `private.is_operator()`), e de um caso
+  em `web/tests/db/` tentando furar o isolamento com uma conta comum.
+- O `proxy.ts` só desvia rotas; nunca use ele como checagem de permissão.
+- A chave secreta do Supabase nunca entra no app, só nos testes de banco.
 
 Antes de mudar algo, leia o `README.md`:
 
