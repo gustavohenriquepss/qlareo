@@ -43,7 +43,7 @@ Ordem de construção, uma fatia por PR:
 1. **Base** (feita): Supabase local, identidade com RLS, cadastro, login, confirmação de
    e-mail e recuperação de senha.
 2. **`/r/:slug`** (feita): conta a leitura e redireciona.
-3. Área do operador: anunciantes, restaurantes e campanhas.
+3. **Área do operador** (feita): anunciantes, restaurantes, campanhas e o QR para a gráfica.
 4. Leituras no painel: total, por dia e por restaurante.
 5. Artes: upload por lado, versões, revisão e aprovação do restaurante.
 
@@ -109,6 +109,32 @@ insert into public.operators (user_id)
 select id from auth.users where email = 'email@do-operador';
 ```
 
+## Área do operador (`/painel/operacao`)
+
+Só aparece para operador; para qualquer outra conta, as rotas dão 404 (e a RLS barra as
+escritas de qualquer jeito). O fluxo de uma venda:
+
+1. O anunciante cria a conta em `app.qlareo.com/cadastro`. Ele vira um anunciante com o
+   nome da empresa que digitou, e aparece em **Anunciantes** com o e-mail (via
+   `public.operator_advertisers`, a única porta para `auth.users`, e só para operador).
+2. Em **Campanhas › Nova campanha**: anunciante, nome, plano (Impacto, ou Alcance com o
+   lado da sacola), link de destino e, se quiser, as datas. Nasce em "Aguardando arte".
+3. Na campanha, marque os restaurantes: cada um ganha o próprio QR.
+4. Baixe o **SVG** de cada QR e mande para a gráfica. O PNG (2048px) é para conferir.
+5. Mude o status à mão conforme a campanha anda (em produção → em circulação → encerrada).
+
+- **O destino muda sem reimprimir.** O QR leva ao `/r/<slug>`, não ao link do anunciante.
+- **Tirar um restaurante** só é possível enquanto o QR não tem leitura: apagar a ligação
+  apaga as leituras, e um QR lido já está impresso em alguma sacola.
+- **O arquivo do QR** tem correção de erro Q (~25%, para papel amassado e mancha) e margem
+  de 4 módulos. Na Vercel aponta sempre para `https://app.qlareo.com`, **inclusive no
+  preview**: o preview usa o mesmo banco e fica atrás de login, e um QR dele mandado à
+  gráfica levaria à tela de login da Vercel. Só no `npm run dev` aponta para a máquina.
+- **Restaurantes** se cadastram em **Restaurantes**; não há exclusão (o banco recusa
+  apagar restaurante com campanha).
+- Ainda não há trava contra dois anunciantes no mesmo lado da sacola, no mesmo
+  restaurante e período. Hoje isso é conferido de olho.
+
 ## QR codes (`/r/:slug`)
 
 Cada restaurante de uma campanha tem o seu QR (`campaign_restaurants.slug`, 7 caracteres
@@ -131,9 +157,11 @@ que grava a leitura e redireciona para o destino da campanha.
   erro.
 
 **Links de e-mail** usam `token_hash` e caem em `/auth/confirmar`, então funcionam mesmo
-abrindo o e-mail em outro aparelho. Os modelos locais estão em `web/supabase/templates/`.
-No projeto de produção, copie os mesmos textos em Auth › Email Templates, ligue "Confirm
-email" e cadastre `https://app.qlareo.com` como Site URL.
+abrindo o e-mail em outro aparelho. Os modelos estão em `web/supabase/templates/`. Em
+produção eles saem pelo SMTP do Resend (`nao-responda@qlareo.com`), e o Auth inteiro
+(modelos, SMTP, Site URL, redirects) é configurado pelo `[remotes.production]` do
+`config.toml` com `npx supabase config push --remote=<ref>`. O push precisa de
+`RESEND_API_KEY` no ambiente: é a senha do SMTP e não fica em arquivo nenhum.
 
 ## Design system
 
