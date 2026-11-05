@@ -11,45 +11,17 @@
  */
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const publishable = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-const secret = process.env.SUPABASE_SECRET_KEY;
-const skip = !url || !publishable || !secret ? "sem Supabase local configurado" : false;
-
-const PASSWORD = "senha-teste-123";
-const noSession = { auth: { persistSession: false, autoRefreshToken: false } };
-
-type Person = { id: string; email: string; client: SupabaseClient; advertiserId: string };
+import { adminClient, anonClient, createPerson, makeOperator, removePerson, skip, type Person } from "./helpers.mts";
 
 describe("RLS de identidade", { skip }, () => {
-  const admin = skip ? (null as never) : createClient(url!, secret!, noSession);
+  const admin = skip ? (null as never) : adminClient();
   const people: Person[] = [];
   let alice: Person;
   let bruno: Person;
   let operador: Person;
 
-  async function person(company: string): Promise<Person> {
-    const email = `rls-${randomUUID()}@teste.local`;
-    const created = await admin.auth.admin.createUser({
-      email,
-      password: PASSWORD,
-      email_confirm: true,
-      user_metadata: { full_name: company, company_name: company },
-    });
-    assert.ifError(created.error);
-    const id = created.data.user!.id;
-
-    const client = createClient(url!, publishable!, noSession);
-    const signedIn = await client.auth.signInWithPassword({ email, password: PASSWORD });
-    assert.ifError(signedIn.error);
-
-    const member = await admin.from("advertiser_members").select("advertiser_id").eq("user_id", id).single();
-    assert.ifError(member.error);
-
-    const p = { id, email, client, advertiserId: member.data.advertiser_id as string };
+  async function person(company: string) {
+    const p = await createPerson(admin, company);
     people.push(p);
     return p;
   }
@@ -58,15 +30,11 @@ describe("RLS de identidade", { skip }, () => {
     alice = await person("Loja da Alice");
     bruno = await person("Oficina do Bruno");
     operador = await person("Qlareo");
-    const op = await admin.from("operators").insert({ user_id: operador.id });
-    assert.ifError(op.error);
+    await makeOperator(admin, operador);
   });
 
   after(async () => {
-    for (const p of people) {
-      await admin.from("advertisers").delete().eq("id", p.advertiserId);
-      await admin.auth.admin.deleteUser(p.id);
-    }
+    for (const p of people) await removePerson(admin, p);
   });
 
   test("o cadastro cria um anunciante com o nome da empresa", async () => {
@@ -120,7 +88,7 @@ describe("RLS de identidade", { skip }, () => {
   });
 
   test("visitante sem login não lê nada", async () => {
-    const anon = createClient(url!, publishable!, noSession);
+    const anon = anonClient();
     for (const table of ["advertisers", "advertiser_members", "operators"]) {
       const { data } = await anon.from(table).select("*");
       assert.ok(!data || data.length === 0, `${table} vazou para o visitante`);

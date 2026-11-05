@@ -42,7 +42,7 @@ Ordem de construção, uma fatia por PR:
 
 1. **Base** (feita): Supabase local, identidade com RLS, cadastro, login, confirmação de
    e-mail e recuperação de senha.
-2. `/r/:slug`: conta a leitura e redireciona.
+2. **`/r/:slug`** (feita): conta a leitura e redireciona.
 3. Área do operador: anunciantes, restaurantes e campanhas.
 4. Leituras no painel: total, por dia e por restaurante.
 5. Artes: upload por lado, versões, revisão e aprovação do restaurante.
@@ -66,6 +66,7 @@ Crie `web/.env.local` com os valores do `supabase status`:
 | `NEXT_PUBLIC_SUPABASE_URL` | `http://127.0.0.1:55321` | API do Supabase |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | "Publishable key" | chave pública; quem protege os dados é a RLS |
 | `SUPABASE_SECRET_KEY` | "Secret key" | **só** para `npm run test:db`; ignora a RLS e nunca entra no app |
+| `SCAN_HASH_SECRET` | qualquer texto (opcional em dev) | segredo do hash do visitante em `/r/:slug`; **obrigatório em produção** |
 
 As `NEXT_PUBLIC_` são embutidas no build: na Vercel, cadastre as duas antes do deploy.
 
@@ -74,7 +75,9 @@ outros projetos Supabase na mesma máquina. O Studio fica em http://127.0.0.1:55
 e-mails de confirmação e de senha caem no Mailpit, em http://127.0.0.1:55324.
 
 O seed (`supabase/seed.sql`) cria duas contas locais, com senha `qlareo123`:
-`operador@qlareo.local` (operador) e `anunciante@exemplo.local` (Padaria Exemplo).
+`operador@qlareo.local` (operador) e `anunciante@exemplo.local` (Padaria Exemplo). A
+Padaria tem uma campanha com QR em dois restaurantes, com leituras dos últimos 14 dias:
+http://localhost:3001/r/padaria-itaborai e http://localhost:3001/r/padaria-icarai.
 `npm run db:reset` recria o banco do zero.
 
 Checks:
@@ -105,6 +108,27 @@ operador. Em produção, depois de a pessoa criar a conta, rode no SQL Editor do
 insert into public.operators (user_id)
 select id from auth.users where email = 'email@do-operador';
 ```
+
+## QR codes (`/r/:slug`)
+
+Cada restaurante de uma campanha tem o seu QR (`campaign_restaurants.slug`, 7 caracteres
+gerados pelo banco, sem 0/o/1/l/i). O QR aponta para `https://app.qlareo.com/r/<slug>`,
+que grava a leitura e redireciona para o destino da campanha.
+
+- **302, nunca permanente.** Redirect permanente fica em cache no celular e a segunda
+  leitura não passaria pelo servidor.
+- **Uma chamada ao banco**, sem sessão: `public.record_scan` resolve o slug e grava. É a
+  única coisa que o visitante anônimo consegue chamar; ele não lê tabela nenhuma.
+- **Não conta:** prévias de link (WhatsApp, Instagram, Telegram…), buscadores, `curl` e
+  pedidos `HEAD`. Eles são redirecionados, mas não viram leitura. Sem isso, cada vez que
+  alguém mandasse o link numa conversa contaria uma leitura falsa.
+- **Privacidade:** o banco não guarda IP nem user agent. `visitor_hash` é um SHA-256 de
+  `SCAN_HASH_SECRET` + dia + IP + user agent. Dá para contar **pessoas únicas por dia**,
+  mas não para voltar ao IP nem ligar a mesma pessoa entre dias. O dia vira à meia-noite de
+  Brasília. Sem `SCAN_HASH_SECRET` em produção, o QR redireciona mas **não conta** (e loga
+  o erro): contar sem segredo deixaria o IP recuperável.
+- **Slug desconhecido** ou falha do banco levam para `qlareo.com`, não para uma página de
+  erro.
 
 **Links de e-mail** usam `token_hash` e caem em `/auth/confirmar`, então funcionam mesmo
 abrindo o e-mail em outro aparelho. Os modelos locais estão em `web/supabase/templates/`.
