@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { authErrorMessage } from "@/lib/auth/errors";
 import { safeNext } from "@/lib/site";
@@ -18,6 +19,18 @@ export type FormState =
   | { status: "sent"; email: string };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Para onde o link do e-mail volta. Só vale com os modelos padrão do Supabase
+ * (produção sem SMTP próprio); os nossos modelos montam o link sozinhos. O
+ * Supabase só aceita destinos da lista de redirects do projeto e, fora dela,
+ * cai na Site URL.
+ */
+async function emailRedirect(next: string) {
+  const origin = (await headers()).get("origin");
+  const base = origin && /^https?:\/\//.test(origin) ? origin : "https://app.qlareo.com";
+  return `${base}/auth/confirmar?next=${encodeURIComponent(next)}`;
+}
 
 function text(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -77,7 +90,10 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   const { error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName, company_name: company } },
+    options: {
+      data: { full_name: fullName, company_name: company },
+      emailRedirectTo: await emailRedirect("/painel"),
+    },
   });
   if (error) return { status: "error", message: authErrorMessage(error), values };
 
@@ -95,7 +111,9 @@ export async function requestPasswordReset(
   if (emailError) return { status: "error", message: emailError, values: { email } };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: await emailRedirect("/nova-senha"),
+  });
 
   // Limite de envio é o único erro que vale mostrar. Qualquer outro some
   // atrás da mesma resposta, exista a conta ou não.
