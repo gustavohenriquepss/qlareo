@@ -458,3 +458,17 @@ max_client_conn = 600
 
 [remotes.production.storage.vector]
 enabled = false
+
+# SMTP do Resend (domínio qlareo.com verificado). A senha é a API key do Resend,
+# lida da variável RESEND_API_KEY na hora do `config push`; nunca vai para o git.
+[remotes.production.auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "nao-responda@qlareo.com"
+sender_name = "Qlareo"
+
+[remotes.production.auth.rate_limit]
+email_sent = 30
