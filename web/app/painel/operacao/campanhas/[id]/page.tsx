@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { Button, buttonClasses } from "@/components/ui/button";
+import { buttonClasses } from "@/components/ui/button";
 import { Badge, Card, cardClasses } from "@/components/ui/card";
 import {
   isUuid,
   periodLabel,
+  scansLabel,
   SIDES_LABEL,
   STATUS_LABEL,
   statusTone,
@@ -14,29 +15,31 @@ import {
 } from "@/lib/campanhas";
 import { qrSvg, scanUrl } from "@/lib/qr";
 import { createClient } from "@/lib/supabase/server";
-import { addRestaurants, removeRestaurant, updateCampaign } from "../../actions";
+import { addRestaurants, removeRestaurant, updateBags, updateCampaign } from "../../actions";
 import { EmptyState, PageHeading } from "../../ui";
 import { advertiserOptions, operatorAdvertisers } from "../advertisers";
 import { CampaignForm } from "../campaign-form";
 import { AddRestaurantsForm } from "./add-restaurants-form";
+import { BagsForm } from "./bags-form";
 
 type Campaign = {
   id: string;
   advertiser_id: string;
   name: string;
+  slug: string;
   sides: Sides;
   status: Status;
   destination_url: string;
   starts_on: string | null;
   ends_on: string | null;
   advertisers: { name: string } | null;
+  scans: { count: number }[];
 };
 
-type Qr = {
+type CampaignRestaurant = {
   id: string;
-  slug: string;
+  bags: number;
   restaurants: { id: string; name: string; city: string; neighborhood: string | null } | null;
-  scans: { count: number }[];
 };
 
 type Restaurant = { id: string; name: string; city: string; neighborhood: string | null };
@@ -48,36 +51,33 @@ export default async function CampanhaPage({ params }: PageProps<"/painel/operac
   if (!isUuid(id)) notFound();
 
   const supabase = await createClient();
-  const [campaign, qrs, restaurants, advertisers, origin] = await Promise.all([
+  const [campaign, links, restaurants, advertisers, origin] = await Promise.all([
     supabase
       .from("campaigns")
-      .select("id, advertiser_id, name, sides, status, destination_url, starts_on, ends_on, advertisers(name)")
+      .select("id, advertiser_id, name, slug, sides, status, destination_url, starts_on, ends_on, advertisers(name), scans(count)")
       .eq("id", id)
       .maybeSingle<Campaign>(),
     supabase
       .from("campaign_restaurants")
-      .select("id, slug, restaurants(id, name, city, neighborhood), scans(count)")
+      .select("id, bags, restaurants(id, name, city, neighborhood)")
       .eq("campaign_id", id)
       .order("created_at")
-      .returns<Qr[]>(),
+      .returns<CampaignRestaurant[]>(),
     supabase.from("restaurants").select("id, name, city, neighborhood").order("city").order("name").returns<Restaurant[]>(),
     operatorAdvertisers(supabase),
     requestOrigin(),
   ]);
   if (campaign.error) throw campaign.error;
   if (!campaign.data) notFound();
-  if (qrs.error) throw qrs.error;
+  if (links.error) throw links.error;
   if (restaurants.error) throw restaurants.error;
 
   const c = campaign.data;
-  const linked = new Set(qrs.data.map((q) => q.restaurants?.id));
+  const linked = new Set(links.data.map((l) => l.restaurants?.id));
   const available = restaurants.data.filter((r) => !linked.has(r.id));
-  const codes = await Promise.all(
-    qrs.data.map(async (q) => {
-      const url = scanUrl(q.slug, origin);
-      return { ...q, url, svg: await qrSvg(url), scans: q.scans[0]?.count ?? 0 };
-    }),
-  );
+  const url = scanUrl(c.slug, origin);
+  const svg = await qrSvg(url);
+  const scans = c.scans[0]?.count ?? 0;
 
   return (
     <>
@@ -96,70 +96,69 @@ export default async function CampanhaPage({ params }: PageProps<"/painel/operac
         }
       />
 
-      <section aria-labelledby="qr-codes" className="flex flex-col gap-4">
+      <section aria-labelledby="qr-code" className={`${cardClasses} flex min-w-0 flex-col gap-5 p-5 sm:flex-row sm:p-6`}>
+        <div
+          role="img"
+          aria-label={`QR code da campanha ${c.name}`}
+          className="size-36 shrink-0 self-center sm:self-start [&>svg]:size-full"
+          // SVG gerado aqui no servidor a partir do nosso próprio link.
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 id="qr-code" className="text-lg font-semibold text-ink">
+              QR code da campanha
+            </h2>
+            <p className="max-w-prose text-sm text-ink-secondary">
+              O mesmo QR vai em todas as sacolas da campanha e leva para{" "}
+              <a href={c.destination_url} target="_blank" rel="noopener noreferrer" className="break-all font-medium text-primary hover:text-primary-hover">
+                {c.destination_url}
+              </a>
+              . Mande o SVG para a gráfica; o PNG é para conferir ou usar em outro lugar.
+            </p>
+          </div>
+          <p className="truncate font-mono text-xs text-ink-secondary" title={url}>
+            {url.replace(/^https?:\/\//, "")}
+          </p>
+          <p className="text-sm font-medium text-ink">{scansLabel(scans)}</p>
+          <div className="mt-auto flex flex-wrap gap-2">
+            <a href={`/painel/qr/${c.id}`} download className={buttonClasses({ size: "sm", variant: "secondary" })}>
+              Baixar SVG
+            </a>
+            <a href={`/painel/qr/${c.id}?formato=png`} download className={buttonClasses({ size: "sm", variant: "secondary" })}>
+              Baixar PNG
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="restaurantes" className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <h2 id="qr-codes" className="text-lg font-semibold text-ink">
-            QR codes por restaurante
+          <h2 id="restaurantes" className="text-lg font-semibold text-ink">
+            Sacolas por restaurante
           </h2>
           <p className="max-w-prose text-sm text-ink-secondary">
-            Cada restaurante tem o próprio QR, para saber de onde veio cada leitura. Todos levam para{" "}
-            <a href={c.destination_url} target="_blank" rel="noopener noreferrer" className="break-all font-medium text-primary hover:text-primary-hover">
-              {c.destination_url}
-            </a>
-            . Mande o SVG para a gráfica; o PNG é para conferir ou usar em outro lugar.
+            Anote quantas sacolas da campanha foram para cada restaurante. O anunciante vê esses números e o
+            total de leituras: é assim que ele sabe onde a sacola rodou.
           </p>
         </div>
 
-        {codes.length ? (
-          <ul className="grid gap-4 sm:grid-cols-2">
-            {codes.map((q) => (
-              <li key={q.id} className={`${cardClasses} flex min-w-0 gap-4 p-4`}>
-                <div
-                  role="img"
-                  aria-label={`QR code de ${q.restaurants?.name}`}
-                  className="size-28 shrink-0 [&>svg]:size-full"
-                  // SVG gerado aqui no servidor a partir do nosso próprio link.
-                  dangerouslySetInnerHTML={{ __html: q.svg }}
-                />
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <div className="min-w-0">
-                    <p className="font-medium text-ink">{q.restaurants?.name}</p>
-                    <p className="text-sm text-ink-muted">{q.restaurants ? place(q.restaurants) : null}</p>
-                  </div>
-                  <p className="truncate font-mono text-xs text-ink-secondary" title={q.url}>
-                    {q.url.replace(/^https?:\/\//, "")}
-                  </p>
-                  <p className="text-sm text-ink-secondary">
-                    {q.scans === 0 ? "Nenhuma leitura" : q.scans === 1 ? "1 leitura" : `${q.scans.toLocaleString("pt-BR")} leituras`}
-                  </p>
-                  <div className="mt-auto flex flex-wrap gap-2">
-                    <a href={`/painel/qr/${q.id}`} download className={buttonClasses({ size: "sm", variant: "secondary" })}>
-                      SVG
-                    </a>
-                    <a href={`/painel/qr/${q.id}?formato=png`} download className={buttonClasses({ size: "sm", variant: "secondary" })}>
-                      PNG
-                    </a>
-                    {q.scans === 0 ? (
-                      <form action={removeRestaurant.bind(null, q.id)}>
-                        <Button
-                          type="submit"
-                          size="sm"
-                          variant="secondary"
-                          className="text-negative"
-                          aria-label={`Tirar ${q.restaurants?.name} da campanha`}
-                        >
-                          Tirar
-                        </Button>
-                      </form>
-                    ) : null}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+        {links.data.length ? (
+          <Card>
+            <BagsForm
+              action={updateBags.bind(null, c.id)}
+              remove={removeRestaurant}
+              rows={links.data.map((l) => ({
+                id: l.id,
+                name: l.restaurants?.name ?? "",
+                place: l.restaurants ? place(l.restaurants) : "",
+                bags: l.bags,
+              }))}
+            />
+          </Card>
         ) : (
           <EmptyState title="Nenhum restaurante nesta campanha">
-            Marque abaixo os restaurantes onde as sacolas vão circular. Cada um ganha um QR code.
+            Marque abaixo os restaurantes que vão receber as sacolas. Depois, anote quantas foram para cada um.
           </EmptyState>
         )}
 

@@ -35,8 +35,10 @@ artes das campanhas** (upload da arte pronta; a Qlareo revisa). Decisões já to
 - **Cadastro aberto, com e-mail e senha.** Toda conta nova nasce com um anunciante próprio
   (nome da empresa do formulário) e não vê nada até a Qlareo ligar uma campanha a ela.
   O pagamento continua fora do sistema, pelo WhatsApp.
-- **Um QR code por restaurante** dentro da campanha, para mostrar leituras por restaurante
-  e por bairro.
+- **Um QR code por campanha** (decisão do dono em 06/11/2026, no lugar de um por
+  restaurante): a gráfica imprime um arquivo só. O anunciante vê o total de leituras e
+  quantas sacolas foram para cada restaurante, que o operador anota. Leitura por
+  restaurante não existe e não é estimada.
 - **O restaurante não usa o painel** por enquanto: aprova a arte pelo WhatsApp, e a Qlareo
   registra.
 
@@ -46,7 +48,7 @@ Ordem de construção, uma fatia por PR:
    e-mail e recuperação de senha.
 2. **`/r/:slug`** (feita): conta a leitura e redireciona.
 3. **Área do operador** (feita): anunciantes, restaurantes, campanhas e o QR para a gráfica.
-4. Leituras no painel: total, por dia e por restaurante.
+4. **Relatório do anunciante** (feita): leituras da campanha e sacolas por restaurante.
 5. Artes: upload por lado, versões, revisão e aprovação do restaurante.
 
 ## Rodar
@@ -78,8 +80,8 @@ e-mails de confirmação e de senha caem no Mailpit, em http://127.0.0.1:55324.
 
 O seed (`supabase/seed.sql`) cria duas contas locais, com senha `qlareo123`:
 `operador@qlareo.local` (operador) e `anunciante@exemplo.local` (Padaria Exemplo). A
-Padaria tem uma campanha com QR em dois restaurantes, com leituras dos últimos 14 dias:
-http://localhost:3001/r/padaria-itaborai e http://localhost:3001/r/padaria-icarai.
+Padaria tem uma campanha com 1.000 sacolas em dois restaurantes e leituras dos últimos 14
+dias. O QR dela é http://localhost:3001/r/padaria-exemplo.
 `npm run db:reset` recria o banco do zero.
 
 Checks:
@@ -121,13 +123,15 @@ escritas de qualquer jeito). O fluxo de uma venda:
    `public.operator_advertisers`, a única porta para `auth.users`, e só para operador).
 2. Em **Campanhas › Nova campanha**: anunciante, nome, arte num lado ou frente e verso,
    link de destino e, se quiser, as datas. Nasce em "Aguardando arte".
-3. Na campanha, marque os restaurantes: cada um ganha o próprio QR.
-4. Baixe o **SVG** de cada QR e mande para a gráfica. O PNG (2048px) é para conferir.
+3. Na campanha, baixe o **SVG** do QR e mande para a gráfica. O PNG (2048px) é para
+   conferir. O QR nasce com a campanha e é o mesmo em todas as sacolas dela.
+4. Marque os restaurantes que recebem as sacolas e anote quantas foram para cada um
+   (**Sacolas por restaurante**). É o que o anunciante vê em `/painel`.
 5. Mude o status à mão conforme a campanha anda (em produção → em circulação → encerrada).
 
 - **O destino muda sem reimprimir.** O QR leva ao `/r/<slug>`, não ao link do anunciante.
-- **Tirar um restaurante** só é possível enquanto o QR não tem leitura: apagar a ligação
-  apaga as leituras, e um QR lido já está impresso em alguma sacola.
+- **Tirar um restaurante** da campanha apaga só o número de sacolas dele. As leituras
+  são da campanha e ficam.
 - **O arquivo do QR** tem correção de erro Q (~25%, para papel amassado e mancha) e margem
   de 4 módulos. Na Vercel aponta sempre para `https://app.qlareo.com`, **inclusive no
   preview**: o preview usa o mesmo banco e fica atrás de login, e um QR dele mandado à
@@ -139,8 +143,8 @@ escritas de qualquer jeito). O fluxo de uma venda:
 
 ## QR codes (`/r/:slug`)
 
-Cada restaurante de uma campanha tem o seu QR (`campaign_restaurants.slug`, 7 caracteres
-gerados pelo banco, sem 0/o/1/l/i). O QR aponta para `https://app.qlareo.com/r/<slug>`,
+Cada campanha tem o seu QR (`campaigns.slug`, 7 caracteres gerados pelo banco, sem
+0/o/1/l/i), e cada leitura é da campanha (`scans.campaign_id`). O QR aponta para `https://app.qlareo.com/r/<slug>`,
 que grava a leitura e redireciona para o destino da campanha.
 
 - **302, nunca permanente.** Redirect permanente fica em cache no celular e a segunda

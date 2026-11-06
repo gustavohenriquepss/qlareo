@@ -41,7 +41,7 @@ describe("área do operador", { skip }, () => {
     assert.ok(error || (data ?? []).length === 0, "anônimo leu a lista de anunciantes");
   });
 
-  test("operador cadastra restaurante e liga à campanha; anunciante não", async () => {
+  test("operador cadastra restaurante, liga à campanha e anota sacolas; anunciante não", async () => {
     const restaurant = await operador.client
       .from("restaurants")
       .insert({ name: "Teste do operador", city: "Niterói", neighborhood: "Icaraí" })
@@ -57,21 +57,35 @@ describe("área do operador", { skip }, () => {
         sides: "frente_e_verso",
         destination_url: "https://alice.example/",
       })
-      .select("id")
-      .single();
-    assert.ifError(campaign.error);
-
-    const qr = await operador.client
-      .from("campaign_restaurants")
-      .insert({ campaign_id: campaign.data.id, restaurant_id: restaurant.data.id })
       .select("id, slug")
       .single();
-    assert.ifError(qr.error);
+    assert.ifError(campaign.error);
+    assert.ok(campaign.data.slug, "campanha nasceu sem QR");
+
+    const link = await operador.client
+      .from("campaign_restaurants")
+      .insert({ campaign_id: campaign.data.id, restaurant_id: restaurant.data.id })
+      .select("id, bags")
+      .single();
+    assert.ifError(link.error);
+    assert.equal(link.data.bags, 0, "restaurante entra com zero sacolas");
+
+    const noted = await operador.client
+      .from("campaign_restaurants")
+      .update({ bags: 750 })
+      .eq("id", link.data.id)
+      .select("bags")
+      .single();
+    assert.ifError(noted.error);
+    assert.equal(noted.data.bags, 750);
+
+    const negative = await operador.client.from("campaign_restaurants").update({ bags: -1 }).eq("id", link.data.id);
+    assert.ok(negative.error, "aceitou sacola negativa");
 
     const sneaky = await alice.client
       .from("campaign_restaurants")
-      .insert({ campaign_id: campaign.data.id, restaurant_id: restaurant.data.id, slug: "da-alice" });
-    assert.ok(sneaky.error, "anunciante criou QR");
+      .insert({ campaign_id: campaign.data.id, restaurant_id: restaurant.data.id, bags: 10 });
+    assert.ok(sneaky.error, "anunciante ligou restaurante");
 
     const renamed = await alice.client
       .from("restaurants")

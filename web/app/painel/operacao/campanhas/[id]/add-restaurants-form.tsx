@@ -37,7 +37,7 @@ export function AddRestaurantsForm({
         ))}
       </fieldset>
       <Button type="submit" size="md" disabled={pending} className="self-start">
-        {pending ? "Gerando…" : "Adicionar e gerar QR"}
+        {pending ? "Adicionando…" : "Adicionar restaurantes"}
       </Button>
     </form>
   );

@@ -187,6 +187,48 @@ export function parseCampaign(source: Source, { withStatus = false } = {}): Pars
   };
 }
 
+/** Teto do check `campaign_restaurants.bags`: só pega dígito a mais. */
+export const MAX_BAGS = 1_000_000;
+
+type Entries = { entries(): IterableIterator<[string, FormDataEntryValue]> };
+
+/**
+ * Sacolas por restaurante, de campos `bags:<id da ligação>`. Aceita ponto de
+ * milhar ("1.200"); vazio conta como zero.
+ */
+export function parseBags(source: Entries): Parsed<{ id: string; bags: number }[]> {
+  const values: Record<string, string> = {};
+  const fields: Record<string, string> = {};
+  const data: { id: string; bags: number }[] = [];
+
+  for (const [key, raw] of source.entries()) {
+    if (!key.startsWith("bags:") || typeof raw !== "string") continue;
+    const id = key.slice("bags:".length);
+    if (!isUuid(id)) continue;
+    const value = raw.trim();
+    values[key] = value;
+    const digits = value.replace(/\./g, "");
+    if (digits && !/^\d+$/.test(digits)) fields[key] = "Use só números.";
+    else if (Number(digits) > MAX_BAGS) fields[key] = "Número alto demais.";
+    else data.push({ id, bags: digits ? Number(digits) : 0 });
+  }
+
+  if (Object.keys(fields).length) return { ok: false, fields, values };
+  return { ok: true, data };
+}
+
+/** "1.200 sacolas", "1 sacola", "Nenhuma sacola". */
+export function bagsLabel(bags: number) {
+  if (bags === 0) return "Nenhuma sacola";
+  return bags === 1 ? "1 sacola" : `${bags.toLocaleString("pt-BR")} sacolas`;
+}
+
+/** "1.200 leituras", "1 leitura", "Nenhuma leitura". */
+export function scansLabel(scans: number) {
+  if (scans === 0) return "Nenhuma leitura";
+  return scans === 1 ? "1 leitura" : `${scans.toLocaleString("pt-BR")} leituras`;
+}
+
 /** Nome de arquivo para a gráfica: só ASCII, minúsculo, com hífen. */
 export function fileSlug(...parts: string[]) {
   return parts
