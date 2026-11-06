@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fileSlug, normalizeDestination, parseCampaign, parseRestaurant, periodLabel, SIDES_LABEL } from "../../lib/campanhas.ts";
+import {
+  bagsLabel,
+  fileSlug,
+  normalizeDestination,
+  parseBags,
+  parseCampaign,
+  parseRestaurant,
+  periodLabel,
+  scansLabel,
+  SIDES_LABEL,
+} from "../../lib/campanhas.ts";
 
 const ADVERTISER = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
 
@@ -85,4 +95,38 @@ test("rótulos", () => {
 
 test("nome de arquivo da gráfica é ASCII", () => {
   assert.equal(fileSlug("Padaria São João", "Cantina da Praça", "pex7k2a"), "padaria-sao-joao-cantina-da-praca-pex7k2a");
+});
+
+const LINK_A = "11111111-1111-4111-8111-111111111111";
+const LINK_B = "22222222-2222-4222-8222-222222222222";
+
+function entries(values: Record<string, string>) {
+  return { entries: () => Object.entries(values)[Symbol.iterator]() };
+}
+
+test("sacolas: ponto de milhar, vazio vira zero, campo estranho ignorado", () => {
+  const parsed = parseBags(entries({ [`bags:${LINK_A}`]: "1.200", [`bags:${LINK_B}`]: "", "bags:nao-e-id": "5", name: "x" }));
+  assert.ok(parsed.ok);
+  assert.deepEqual(parsed.data, [
+    { id: LINK_A, bags: 1200 },
+    { id: LINK_B, bags: 0 },
+  ]);
+});
+
+test("sacolas: recusa negativo, decimal e número absurdo, no campo certo", () => {
+  for (const bad of ["-5", "10,5", "dez", "1000001"]) {
+    const parsed = parseBags(entries({ [`bags:${LINK_A}`]: bad, [`bags:${LINK_B}`]: "300" }));
+    assert.ok(!parsed.ok, bad);
+    assert.deepEqual(Object.keys(parsed.fields), [`bags:${LINK_A}`], bad);
+    assert.equal(parsed.values[`bags:${LINK_A}`], bad, "devolve o que foi digitado");
+  }
+});
+
+test("rótulos de sacola e leitura", () => {
+  assert.equal(bagsLabel(0), "Nenhuma sacola");
+  assert.equal(bagsLabel(1), "1 sacola");
+  assert.equal(bagsLabel(1200), "1.200 sacolas");
+  assert.equal(scansLabel(0), "Nenhuma leitura");
+  assert.equal(scansLabel(1), "1 leitura");
+  assert.equal(scansLabel(2500), "2.500 leituras");
 });

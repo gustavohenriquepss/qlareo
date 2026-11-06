@@ -4,7 +4,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOperator } from "@/lib/account";
-import { isUuid, parseCampaign, parseRestaurant } from "@/lib/campanhas";
+import { isUuid, parseBags, parseCampaign, parseRestaurant } from "@/lib/campanhas";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -92,7 +92,7 @@ export async function updateCampaign(id: string, _prev: ActionState, formData: F
   return { status: "saved", message: "Campanha salva." };
 }
 
-/** Liga restaurantes à campanha. Cada ligação ganha o próprio QR (slug gerado no banco). */
+/** Liga restaurantes à campanha, com zero sacolas até o operador anotar. O QR é da campanha. */
 export async function addRestaurants(campaignId: string, _prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireOperator();
   const ids = formData.getAll("restaurant_id").filter(isUuid);
@@ -109,27 +109,45 @@ export async function addRestaurants(campaignId: string, _prev: ActionState, for
   if (error) return dbError(error, "ligar restaurantes");
 
   refresh();
-  return { status: "saved", message: ids.length === 1 ? "QR code criado." : `${ids.length} QR codes criados.` };
+  return {
+    status: "saved",
+    message: ids.length === 1 ? "Restaurante adicionado." : `${ids.length} restaurantes adicionados.`,
+  };
+}
+
+/** Anota quantas sacolas da campanha foram para cada restaurante. É o que o anunciante vê. */
+export async function updateBags(campaignId: string, _prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireOperator();
+  if (!isUuid(campaignId)) return { status: "error", message: "Campanha não encontrada." };
+  const parsed = parseBags(formData);
+  if (!parsed.ok) {
+    return { status: "error", message: "Confira os números marcados.", fields: parsed.fields, values: parsed.values };
+  }
+
+  const supabase = await createClient();
+  const results = await Promise.all(
+    parsed.data.map(({ id, bags }) =>
+      supabase.from("campaign_restaurants").update({ bags }).eq("id", id).eq("campaign_id", campaignId),
+    ),
+  );
+  const failed = results.find((r) => r.error)?.error;
+  if (failed) return { ...dbError(failed, "anotar sacolas"), values: parsedValues(formData) };
+
+  refresh();
+  return { status: "saved", message: "Sacolas salvas." };
 }
 
 /**
- * Tira um restaurante da campanha. Só sai QR sem leitura: apagar a ligação
- * apaga as leituras junto (cascata), e um QR que já foi lido provavelmente já
- * está impresso numa sacola por aí.
+ * Tira um restaurante da campanha. As leituras são da campanha, então nada se
+ * perde além do número de sacolas anotado para ele.
  */
-export async function removeRestaurant(qrId: string): Promise<void> {
+export async function removeRestaurant(linkId: string): Promise<void> {
   await requireOperator();
-  if (!isUuid(qrId)) return;
+  if (!isUuid(linkId)) return;
 
   const supabase = await createClient();
-  const { count, error } = await supabase
-    .from("scans")
-    .select("id", { count: "exact", head: true })
-    .eq("campaign_restaurant_id", qrId);
-  if (error || count !== 0) return;
-
-  const removed = await supabase.from("campaign_restaurants").delete().eq("id", qrId);
-  if (removed.error) console.error("[operacao] remover QR:", removed.error.code, removed.error.message);
+  const removed = await supabase.from("campaign_restaurants").delete().eq("id", linkId);
+  if (removed.error) console.error("[operacao] tirar restaurante:", removed.error.code, removed.error.message);
   refresh();
 }
 
