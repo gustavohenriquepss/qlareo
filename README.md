@@ -49,7 +49,7 @@ Ordem de construção, uma fatia por PR:
 2. **`/r/:slug`** (feita): conta a leitura e redireciona.
 3. **Área do operador** (feita): anunciantes, restaurantes, campanhas e o QR para a gráfica.
 4. **Relatório do anunciante** (feita): leituras da campanha e sacolas por restaurante.
-5. Artes: upload por lado, versões, revisão e aprovação do restaurante.
+5. **Artes** (feita): upload por lado, versões, revisão e aprovação do restaurante.
 
 ## Rodar
 
@@ -80,8 +80,9 @@ e-mails de confirmação e de senha caem no Mailpit, em http://127.0.0.1:55324.
 
 O seed (`supabase/seed.sql`) cria duas contas locais, com senha `qlareo123`:
 `operador@qlareo.local` (operador) e `anunciante@exemplo.local` (Padaria Exemplo). A
-Padaria tem uma campanha com 1.000 sacolas em dois restaurantes e leituras dos últimos 14
-dias. O QR dela é http://localhost:3001/r/padaria-exemplo.
+Padaria tem uma campanha em circulação, com 1.000 sacolas em dois restaurantes e leituras
+dos últimos 14 dias (o QR dela é http://localhost:3001/r/padaria-exemplo), e outra de
+frente e verso esperando arte, para testar o envio e a revisão.
 `npm run db:reset` recria o banco do zero.
 
 Checks:
@@ -125,9 +126,15 @@ escritas de qualquer jeito). O fluxo de uma venda:
    link de destino e, se quiser, as datas. Nasce em "Aguardando arte".
 3. Na campanha, baixe o **SVG** do QR e mande para a gráfica. O PNG (2048px) é para
    conferir. O QR nasce com a campanha e é o mesmo em todas as sacolas dela.
-4. Marque os restaurantes que recebem as sacolas e anote quantas foram para cada um
+4. Em **Artes**, confira cada versão que o anunciante mandar, mostre ao restaurante pelo
+   WhatsApp e registre: **Aprovar** ou **Pedir ajuste** (com a nota do que mudar, que o
+   anunciante lê). Se ele mandar a arte pelo WhatsApp, suba você mesmo. Com todos os lados
+   aprovados, a tela avisa; aí é mandar para a gráfica.
+5. Marque os restaurantes que recebem as sacolas e anote quantas foram para cada um
    (**Sacolas por restaurante**). É o que o anunciante vê em `/painel`.
-5. Mude o status à mão conforme a campanha anda (em produção → em circulação → encerrada).
+6. Mude o status à mão conforme a campanha anda (em produção → em circulação → encerrada).
+   Saindo de "Aguardando arte", o anunciante não manda mais versão; para reabrir, volte o
+   status.
 
 - **O destino muda sem reimprimir.** O QR leva ao `/r/<slug>`, não ao link do anunciante.
 - **Tirar um restaurante** da campanha apaga só o número de sacolas dele. As leituras
@@ -140,6 +147,29 @@ escritas de qualquer jeito). O fluxo de uma venda:
   apagar restaurante com campanha).
 - Não há conflito de lado para travar: cada sacola é de um anunciante só, e dois
   anunciantes no mesmo restaurante recebem lotes de sacola diferentes.
+
+## Artes
+
+O anunciante manda a arte pronta de cada lado comprado (só a frente na campanha de um
+lado; frente e verso na de dois), em PDF, PNG ou JPG, até 50 MB. Não há especificação da
+gráfica ainda: a conferência é a revisão da Qlareo.
+
+- **Cada envio é uma versão nova** em `public.artworks`; nada é sobrescrito nem apagado
+  pela API. Só a mais nova de cada lado vale, e as outras ficam de histórico.
+- **Status:** `em_revisao` (enviada), `ajustes` (exige `review_note`), `aprovada`. O
+  anunciante só cria versão em revisão, em nome próprio, e só enquanto a campanha está em
+  "Aguardando arte"; quem revisa é o operador.
+- **O arquivo não passa pelo app.** O servidor pede ao Storage uma URL assinada (com a
+  sessão de quem envia, então a policy do bucket decide ali), o navegador sobe direto
+  para o bucket privado `artes`, e o servidor grava a versão com o tamanho e o tipo que o
+  Storage registrou. O bucket recusa outro formato e arquivo acima de 50 MB.
+- **Caminho:** `<id da campanha>/<uuid>.<pdf|png|jpg>`. As policies do bucket leem a
+  campanha da primeira pasta, e um check do banco impede a versão de apontar para arquivo
+  de outra campanha.
+- **Abrir e baixar** passam por `/painel/artes/<id>`, que confere o acesso e redireciona
+  para uma URL assinada de um minuto.
+- `tests/db/artes.test.mts` tenta enviar, ler e baixar arte de outra conta, se aprovar,
+  sobrescrever e mandar verso numa campanha de um lado.
 
 ## QR codes (`/r/:slug`)
 
