@@ -6,25 +6,25 @@
  * a validação aqui existe para devolver o erro no campo certo, em português.
  */
 
-export const PLANS = ["impacto", "alcance"] as const;
-export const SIDES = ["frente", "verso"] as const;
+/**
+ * Onde vai a arte. Cada sacola tem uma marca só; o anunciante escolhe um lado
+ * ou os dois (frente e verso, 25% a mais). O preço mora na landing.
+ */
+export const SIDES = ["um_lado", "frente_e_verso"] as const;
 export const STATUSES = ["aguardando_arte", "em_producao", "em_circulacao", "encerrada"] as const;
 
-export type Plan = (typeof PLANS)[number];
-export type Side = (typeof SIDES)[number];
+export type Sides = (typeof SIDES)[number];
 export type Status = (typeof STATUSES)[number];
 
-export const PLAN_LABEL: Record<Plan, string> = {
-  impacto: "Impacto",
-  alcance: "Alcance",
+export const SIDES_LABEL: Record<Sides, string> = {
+  um_lado: "Um lado",
+  frente_e_verso: "Frente e verso",
 };
 
-export const PLAN_HINT: Record<Plan, string> = {
-  impacto: "Sacola inteira, frente e verso",
-  alcance: "Um lado da sacola",
+export const SIDES_HINT: Record<Sides, string> = {
+  um_lado: "Uma arte, num lado da sacola",
+  frente_e_verso: "Duas artes, uma em cada lado (25% a mais)",
 };
-
-export const SIDE_LABEL: Record<Side, string> = { frente: "Frente", verso: "Verso" };
 
 export const STATUS_LABEL: Record<Status, string> = {
   aguardando_arte: "Aguardando arte",
@@ -38,11 +38,6 @@ export function statusTone(status: Status) {
   if (status === "em_circulacao") return "positive" as const;
   if (status === "aguardando_arte") return "warning" as const;
   return "neutral" as const;
-}
-
-/** "Impacto" ou "Alcance · Verso". */
-export function placementLabel(plan: Plan, side: Side | null) {
-  return plan === "alcance" && side ? `${PLAN_LABEL.alcance} · ${SIDE_LABEL[side]}` : PLAN_LABEL[plan];
 }
 
 /** "2026-11-05" → "05/11/2026", sem passar por `Date` (que puxaria o fuso). */
@@ -134,8 +129,7 @@ export function parseRestaurant(source: Source): Parsed<RestaurantInput> {
 export type CampaignInput = {
   advertiser_id: string;
   name: string;
-  plan: Plan;
-  side: Side | null;
+  sides: Sides;
   destination_url: string;
   starts_on: string | null;
   ends_on: string | null;
@@ -147,8 +141,7 @@ export function parseCampaign(source: Source, { withStatus = false } = {}): Pars
   const values = {
     advertiser_id: text(source, "advertiser_id"),
     name: text(source, "name"),
-    plan: text(source, "plan"),
-    side: text(source, "side"),
+    sides: text(source, "sides"),
     destination_url: text(source, "destination_url"),
     starts_on: text(source, "starts_on"),
     ends_on: text(source, "ends_on"),
@@ -160,10 +153,8 @@ export function parseCampaign(source: Source, { withStatus = false } = {}): Pars
   if (!values.name) fields.name = "Dê um nome para a campanha.";
   else if (values.name.length > 120) fields.name = "Use até 120 caracteres.";
 
-  const plan = (PLANS as readonly string[]).includes(values.plan) ? (values.plan as Plan) : null;
-  if (!plan) fields.plan = "Escolha o plano.";
-  const side = (SIDES as readonly string[]).includes(values.side) ? (values.side as Side) : null;
-  if (plan === "alcance" && !side) fields.side = "No Alcance, diga em qual lado da sacola.";
+  const sides = (SIDES as readonly string[]).includes(values.sides) ? (values.sides as Sides) : null;
+  if (!sides) fields.sides = "Escolha se a arte vai num lado ou nos dois.";
 
   const destination = normalizeDestination(values.destination_url);
   if (!values.destination_url) fields.destination_url = "Informe para onde o QR leva.";
@@ -187,8 +178,7 @@ export function parseCampaign(source: Source, { withStatus = false } = {}): Pars
     data: {
       advertiser_id: values.advertiser_id,
       name: values.name,
-      plan: plan!,
-      side: plan === "alcance" ? side : null,
+      sides: sides!,
       destination_url: destination!,
       starts_on: values.starts_on || null,
       ends_on: values.ends_on || null,

@@ -5,8 +5,9 @@ A Qlareo é uma **rede de mídia em sacolas de delivery**. Este repositório é 
 
 - Restaurantes recebem sacolas de papel kraft impressas de graça.
 - Anunciantes locais pagam 100% antecipado para aparecer nelas.
-- Dois planos: **Impacto** (1 anunciante, frente e verso; id `exclusiva`) e **Alcance**
-  (1 anunciante por lado; id `meia`).
+- Uma marca por sacola: arte num lado (R$ 2,00/sacola) ou frente e verso (+25%, R$ 2,50),
+  mínimo de 1.000 sacolas/mês. No banco, `campaigns.sides` (`um_lado`, `frente_e_verso`).
+  O preço mora na landing; os planos Impacto/Alcance não existem mais.
 - Comida, bebida e app de delivery não anunciam na rede; o restaurante vê cada arte antes.
 - Piloto em Itaboraí e Icaraí, Niterói (RJ).
 

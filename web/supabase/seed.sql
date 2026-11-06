@@ -47,10 +47,10 @@ insert into public.restaurants (id, name, city, neighborhood) values
   ('00000000-0000-4000-9000-000000000003', 'Sushi Icaraí', 'Niterói', 'Icaraí'),
   ('00000000-0000-4000-9000-000000000004', 'Burger da Moreira', 'Niterói', 'Icaraí');
 
-insert into public.campaigns (id, advertiser_id, name, plan, side, status, destination_url, starts_on, ends_on)
+insert into public.campaigns (id, advertiser_id, name, sides, status, destination_url, starts_on, ends_on)
 select
   '00000000-0000-4000-a000-000000000001', m.advertiser_id, 'Lançamento do pão de fermentação natural',
-  'alcance', 'frente', 'em_circulacao', 'https://wa.me/5521999999999?text=Vi%20na%20sacola',
+  'um_lado', 'em_circulacao', 'https://wa.me/5521999999999?text=Vi%20na%20sacola',
   current_date - 14, current_date + 16
 from public.advertiser_members m
 where m.user_id = '00000000-0000-4000-8000-000000000002';

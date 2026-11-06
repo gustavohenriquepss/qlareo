@@ -54,8 +54,7 @@ describe("área do operador", { skip }, () => {
       .insert({
         advertiser_id: alice.advertiserId,
         name: "Campanha do operador",
-        plan: "alcance",
-        side: "verso",
+        sides: "frente_e_verso",
         destination_url: "https://alice.example/",
       })
       .select("id")

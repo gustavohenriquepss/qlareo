@@ -1,15 +1,14 @@
 import Link from "next/link";
 import { buttonClasses } from "@/components/ui/button";
 import { Badge, cardClasses } from "@/components/ui/card";
-import { periodLabel, placementLabel, STATUS_LABEL, statusTone, type Plan, type Side, type Status } from "@/lib/campanhas";
+import { periodLabel, SIDES_LABEL, STATUS_LABEL, statusTone, type Sides, type Status } from "@/lib/campanhas";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, PageHeading } from "../ui";
 
 type Row = {
   id: string;
   name: string;
-  plan: Plan;
-  side: Side | null;
+  sides: Sides;
   status: Status;
   starts_on: string | null;
   ends_on: string | null;
@@ -21,7 +20,7 @@ export default async function CampanhasPage() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("campaigns")
-    .select("id, name, plan, side, status, starts_on, ends_on, advertisers(name), campaign_restaurants(count)")
+    .select("id, name, sides, status, starts_on, ends_on, advertisers(name), campaign_restaurants(count)")
     .order("created_at", { ascending: false })
     .returns<Row[]>();
   if (error) throw error;
@@ -50,7 +49,7 @@ export default async function CampanhasPage() {
                   <div className="min-w-0">
                     <p className="font-medium text-ink">{c.name}</p>
                     <p className="text-sm text-ink-muted">
-                      {c.advertisers?.name} · {placementLabel(c.plan, c.side)} · {periodLabel(c.starts_on, c.ends_on)}
+                      {c.advertisers?.name} · {SIDES_LABEL[c.sides]} · {periodLabel(c.starts_on, c.ends_on)}
                     </p>
                   </div>
                   <div className="flex items-center gap-3 text-sm">

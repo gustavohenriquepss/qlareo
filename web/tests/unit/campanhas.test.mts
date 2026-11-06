@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fileSlug, normalizeDestination, parseCampaign, parseRestaurant, periodLabel, placementLabel } from "../../lib/campanhas.ts";
+import { fileSlug, normalizeDestination, parseCampaign, parseRestaurant, periodLabel, SIDES_LABEL } from "../../lib/campanhas.ts";
 
 const ADVERTISER = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
 
@@ -11,7 +11,7 @@ function form(values: Record<string, string>) {
 const base = {
   advertiser_id: ADVERTISER,
   name: "Black Friday",
-  plan: "impacto",
+  sides: "um_lado",
   destination_url: "https://padaria.example/oferta",
 };
 
@@ -26,20 +26,16 @@ test("destino que não é site é recusado", () => {
   }
 });
 
-test("Impacto não tem lado, mesmo que o formulário mande um", () => {
-  const parsed = parseCampaign(form({ ...base, side: "frente" }));
-  assert.ok(parsed.ok);
-  assert.equal(parsed.data.side, null);
-});
+test("a arte vai num lado ou nos dois, e mais nada", () => {
+  const dois = parseCampaign(form({ ...base, sides: "frente_e_verso" }));
+  assert.ok(dois.ok);
+  assert.equal(dois.data.sides, "frente_e_verso");
 
-test("Alcance precisa do lado", () => {
-  const sem = parseCampaign(form({ ...base, plan: "alcance" }));
-  assert.ok(!sem.ok);
-  assert.ok(sem.fields.side);
-
-  const com = parseCampaign(form({ ...base, plan: "alcance", side: "verso" }));
-  assert.ok(com.ok);
-  assert.equal(com.data.side, "verso");
+  for (const bad of ["", "impacto", "alcance", "verso"]) {
+    const parsed = parseCampaign(form({ ...base, sides: bad }));
+    assert.ok(!parsed.ok, bad);
+    assert.ok(parsed.fields.sides, bad);
+  }
 });
 
 test("datas: opcionais, válidas e na ordem", () => {
@@ -81,8 +77,8 @@ test("restaurante: nome e cidade obrigatórios, bairro opcional", () => {
 });
 
 test("rótulos", () => {
-  assert.equal(placementLabel("impacto", null), "Impacto");
-  assert.equal(placementLabel("alcance", "frente"), "Alcance · Frente");
+  assert.equal(SIDES_LABEL.um_lado, "Um lado");
+  assert.equal(SIDES_LABEL.frente_e_verso, "Frente e verso");
   assert.equal(periodLabel("2026-11-05", "2026-12-05"), "05/11/2026 a 05/12/2026");
   assert.equal(periodLabel(null, null), "Sem datas");
 });

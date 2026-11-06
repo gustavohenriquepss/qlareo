@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import { FormError } from "@/components/auth/form-parts";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { SelectField } from "@/components/ui/select-field";
-import { PLAN_HINT, PLAN_LABEL, PLANS, SIDE_LABEL, SIDES, STATUS_LABEL, STATUSES, type Plan } from "@/lib/campanhas";
+import { SIDES, SIDES_HINT, SIDES_LABEL, STATUS_LABEL, STATUSES, type Sides } from "@/lib/campanhas";
 import type { ActionState } from "../actions";
 import { SavedNotice } from "../ui";
 
@@ -14,8 +14,7 @@ export type AdvertiserOption = { id: string; name: string; email: string | null 
 export type CampaignDefaults = {
   advertiser_id?: string;
   name?: string;
-  plan?: string;
-  side?: string | null;
+  sides?: string;
   destination_url?: string;
   starts_on?: string | null;
   ends_on?: string | null;
@@ -35,7 +34,7 @@ type Versioned = ActionState & { version: number };
 /*
   O React 19 reseta o formulário depois de cada envio, e `<select>` e rádio
   não pegam o `defaultValue` novo: depois de um erro, o anunciante escolhido
-  voltava para "Escolha…" e o plano para Impacto. Cada resposta ganha uma
+  voltava para "Escolha…" e a arte para um lado. Cada resposta ganha uma
   versão, e os campos remontam com ela, já com o que foi digitado.
 */
 export function CampaignForm({ action: submit, ...props }: Props) {
@@ -57,7 +56,7 @@ function CampaignFormBody({
 }: Omit<Props, "action"> & { state: ActionState; action: (formData: FormData) => void; pending: boolean }) {
   const fields = state.status === "error" ? state.fields : undefined;
   const values: CampaignDefaults = (state.status === "error" ? state.values : undefined) ?? initial;
-  const [plan, setPlan] = useState<string>(values.plan || "impacto");
+  const sides = values.sides || "um_lado";
 
   return (
     <form action={action} className="flex flex-col gap-5" noValidate>
@@ -93,43 +92,29 @@ function CampaignFormBody({
       />
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1.5 text-sm font-medium text-ink">Plano</legend>
+        <legend className="mb-1.5 text-sm font-medium text-ink">Arte na sacola</legend>
         <div className="grid gap-2 sm:grid-cols-2">
-          {PLANS.map((p: Plan) => (
+          {SIDES.map((p: Sides) => (
             <label
               key={p}
               className="flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-border-strong bg-surface px-4 py-3 has-checked:border-primary has-checked:bg-primary/5"
             >
               <input
                 type="radio"
-                name="plan"
+                name="sides"
                 value={p}
-                defaultChecked={plan === p}
-                onChange={() => setPlan(p)}
+                defaultChecked={sides === p}
                 className="mt-1 size-4 accent-[var(--primary)]"
               />
               <span className="flex flex-col">
-                <span className="font-semibold text-ink">{PLAN_LABEL[p]}</span>
-                <span className="text-sm text-ink-muted">{PLAN_HINT[p]}</span>
+                <span className="font-semibold text-ink">{SIDES_LABEL[p]}</span>
+                <span className="text-sm text-ink-muted">{SIDES_HINT[p]}</span>
               </span>
             </label>
           ))}
         </div>
-        {fields?.plan ? <p className="text-sm text-negative">{fields.plan}</p> : null}
+        {fields?.sides ? <p className="text-sm text-negative">{fields.sides}</p> : null}
       </fieldset>
-
-      {plan === "alcance" ? (
-        <SelectField label="Lado da sacola" name="side" required defaultValue={values.side ?? ""} error={fields?.side}>
-          <option value="" disabled>
-            Escolha…
-          </option>
-          {SIDES.map((s) => (
-            <option key={s} value={s}>
-              {SIDE_LABEL[s]}
-            </option>
-          ))}
-        </SelectField>
-      ) : null}
 
       <Field
         label="Para onde o QR leva"
