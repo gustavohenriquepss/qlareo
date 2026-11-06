@@ -13,7 +13,9 @@ import {
   type Sides,
   type Status,
 } from "@/lib/campanhas";
+import type { ArtworkRow } from "@/lib/artes";
 import { qrSvg, scanUrl } from "@/lib/qr";
+import { ArtworkPanel } from "../../../artes/artwork-panel";
 import { createClient } from "@/lib/supabase/server";
 import { addRestaurants, removeRestaurant, updateBags, updateCampaign } from "../../actions";
 import { EmptyState, PageHeading } from "../../ui";
@@ -51,7 +53,7 @@ export default async function CampanhaPage({ params }: PageProps<"/painel/operac
   if (!isUuid(id)) notFound();
 
   const supabase = await createClient();
-  const [campaign, links, restaurants, advertisers, origin] = await Promise.all([
+  const [campaign, links, restaurants, advertisers, origin, artworks] = await Promise.all([
     supabase
       .from("campaigns")
       .select("id, advertiser_id, name, slug, sides, status, destination_url, starts_on, ends_on, advertisers(name), scans(count)")
@@ -66,8 +68,14 @@ export default async function CampanhaPage({ params }: PageProps<"/painel/operac
     supabase.from("restaurants").select("id, name, city, neighborhood").order("city").order("name").returns<Restaurant[]>(),
     operatorAdvertisers(supabase),
     requestOrigin(),
+    supabase
+      .from("artworks")
+      .select("id, side, file_name, content_type, size_bytes, status, review_note, reviewed_at, created_at")
+      .eq("campaign_id", id)
+      .returns<ArtworkRow[]>(),
   ]);
   if (campaign.error) throw campaign.error;
+  if (artworks.error) throw artworks.error;
   if (!campaign.data) notFound();
   if (links.error) throw links.error;
   if (restaurants.error) throw restaurants.error;
@@ -131,6 +139,20 @@ export default async function CampanhaPage({ params }: PageProps<"/painel/operac
           </div>
         </div>
       </section>
+
+      <Card aria-labelledby="artes">
+        <div className="mb-4 flex flex-col gap-1">
+          <h2 id="artes" className="text-lg font-semibold text-ink">
+            Artes
+          </h2>
+          <p className="max-w-prose text-sm text-ink-secondary">
+            Confira cada versão, mostre ao restaurante pelo WhatsApp e registre aqui. O anunciante vê o
+            resultado e a nota no painel dele, e só consegue mandar versão nova enquanto a campanha está em
+            “Aguardando arte”.
+          </p>
+        </div>
+        <ArtworkPanel campaign={c} artworks={artworks.data} mode="operador" />
+      </Card>
 
       <section aria-labelledby="restaurantes" className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">

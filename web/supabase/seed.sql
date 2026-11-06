@@ -54,6 +54,14 @@ select
 from public.advertiser_members m
 where m.user_id = '00000000-0000-4000-8000-000000000002';
 
+-- Uma campanha esperando arte, para testar o envio e a revisão (sem restaurantes ainda).
+insert into public.campaigns (id, advertiser_id, name, slug, sides, status, destination_url)
+select
+  '00000000-0000-4000-a000-000000000002', m.advertiser_id, 'Encomendas de Natal',
+  'padaria-natal', 'frente_e_verso', 'aguardando_arte', 'https://wa.me/5521999999999?text=Natal'
+from public.advertiser_members m
+where m.user_id = '00000000-0000-4000-8000-000000000002';
+
 insert into public.campaign_restaurants (id, campaign_id, restaurant_id, bags) values
   ('00000000-0000-4000-b000-000000000001', '00000000-0000-4000-a000-000000000001',
    '00000000-0000-4000-9000-000000000001', 600),
@@ -69,4 +77,6 @@ select
   encode(extensions.digest(c.id::text || d || (n / 4 * 4 + case when random() < 0.25 then 0 else n % 4 end), 'sha256'), 'hex')
 from public.campaigns c
 cross join generate_series(0, 13) as d
-cross join lateral generate_series(1, (6 + floor(random() * 18))::int) as n;
+cross join lateral generate_series(1, (6 + floor(random() * 18))::int) as n
+-- Só a campanha em circulação: a que espera arte ainda não tem sacola na rua.
+where c.status = 'em_circulacao';

@@ -71,7 +71,9 @@ async function advertiserCampaigns(advertiserIds: string[]) {
   const { data, error } = await supabase
     .from("campaigns")
     .select(
-      "id, name, sides, status, destination_url, starts_on, ends_on, scans(count), campaign_restaurants(id, bags, restaurants(name, city, neighborhood))",
+      "id, name, sides, status, destination_url, starts_on, ends_on, scans(count), " +
+        "campaign_restaurants(id, bags, restaurants(name, city, neighborhood)), " +
+        "artworks(id, side, file_name, content_type, size_bytes, status, review_note, reviewed_at, created_at)",
     )
     .in("advertiser_id", advertiserIds)
     .order("created_at", { ascending: false })

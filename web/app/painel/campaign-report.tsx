@@ -1,4 +1,6 @@
 import { Badge, cardClasses } from "@/components/ui/card";
+import type { ArtworkRow } from "@/lib/artes";
+import { ArtworkPanel } from "./artes/artwork-panel";
 import { bagsLabel, periodLabel, SIDES_LABEL, STATUS_LABEL, statusTone, type Sides, type Status } from "@/lib/campanhas";
 
 export type ReportCampaign = {
@@ -15,6 +17,7 @@ export type ReportCampaign = {
     bags: number;
     restaurants: { name: string; city: string; neighborhood: string | null } | null;
   }[];
+  artworks: ArtworkRow[];
 };
 
 const place = (r: { city: string; neighborhood: string | null }) => [r.neighborhood, r.city].filter(Boolean).join(", ");
@@ -30,6 +33,14 @@ export function CampaignReport({ campaign: c }: { campaign: ReportCampaign }) {
   const rows = [...c.campaign_restaurants].sort((a, b) => b.bags - a.bags);
   const bags = rows.reduce((sum, r) => sum + r.bags, 0);
   const headingId = `campanha-${c.id}`;
+  // Enquanto a campanha espera arte, o envio é o que importa e vem antes dos números.
+  const artFirst = c.status === "aguardando_arte";
+  const art = (
+    <div className="flex flex-col gap-3">
+      <h3 className="font-semibold text-ink">Arte da sacola</h3>
+      <ArtworkPanel campaign={c} artworks={c.artworks} mode="anunciante" />
+    </div>
+  );
 
   return (
     <section aria-labelledby={headingId} className={`${cardClasses} flex flex-col gap-6 p-5 sm:p-6`}>
@@ -44,6 +55,8 @@ export function CampaignReport({ campaign: c }: { campaign: ReportCampaign }) {
           {SIDES_LABEL[c.sides]} · {periodLabel(c.starts_on, c.ends_on)}
         </p>
       </div>
+
+      {artFirst ? art : null}
 
       <dl className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1 rounded-xl bg-surface-2 px-4 py-3">
@@ -87,6 +100,10 @@ export function CampaignReport({ campaign: c }: { campaign: ReportCampaign }) {
           <p className="text-sm text-ink-secondary">Os restaurantes aparecem aqui quando as sacolas forem distribuídas.</p>
         )}
       </div>
+
+      {/* Campanha que já saiu de "aguardando arte" sem versão no painel (arte combinada por
+          fora, antes desta tela existir): não há o que mostrar nem o que pedir. */}
+      {artFirst || !c.artworks.length ? null : art}
 
       <p className="text-sm text-ink-muted">
         O QR é o mesmo em todas as sacolas, então as leituras são da campanha inteira, não de cada restaurante.
