@@ -6,11 +6,10 @@ import { Badge, Card, cardClasses } from "@/components/ui/card";
 import {
   isUuid,
   periodLabel,
-  placementLabel,
+  SIDES_LABEL,
   STATUS_LABEL,
   statusTone,
-  type Plan,
-  type Side,
+  type Sides,
   type Status,
 } from "@/lib/campanhas";
 import { qrSvg, scanUrl } from "@/lib/qr";
@@ -25,8 +24,7 @@ type Campaign = {
   id: string;
   advertiser_id: string;
   name: string;
-  plan: Plan;
-  side: Side | null;
+  sides: Sides;
   status: Status;
   destination_url: string;
   starts_on: string | null;
@@ -53,7 +51,7 @@ export default async function CampanhaPage({ params }: PageProps<"/painel/operac
   const [campaign, qrs, restaurants, advertisers, origin] = await Promise.all([
     supabase
       .from("campaigns")
-      .select("id, advertiser_id, name, plan, side, status, destination_url, starts_on, ends_on, advertisers(name)")
+      .select("id, advertiser_id, name, sides, status, destination_url, starts_on, ends_on, advertisers(name)")
       .eq("id", id)
       .maybeSingle<Campaign>(),
     supabase
@@ -90,7 +88,7 @@ export default async function CampanhaPage({ params }: PageProps<"/painel/operac
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>{c.advertisers?.name}</span>
             <span aria-hidden>·</span>
-            <span>{placementLabel(c.plan, c.side)}</span>
+            <span>{SIDES_LABEL[c.sides]}</span>
             <span aria-hidden>·</span>
             <span>{periodLabel(c.starts_on, c.ends_on)}</span>
             <Badge tone={statusTone(c.status)}>{STATUS_LABEL[c.status]}</Badge>

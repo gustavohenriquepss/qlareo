@@ -9,9 +9,11 @@ A Qlareo é uma **rede de mídia em sacolas de delivery**.
 
 - Restaurantes recebem sacolas de papel kraft impressas **de graça**.
 - Anunciantes locais pagam para aparecer nelas, **100% antecipado**.
-- Dois planos: **Impacto** (um anunciante, sacola inteira, frente e verso) e **Alcance**
-  (um anunciante por lado, o outro lado é de alguém que não concorre). Na landing o id
-  continua `exclusiva` e `meia`.
+- **Uma marca por sacola.** O anunciante escolhe a arte num lado (R$ 2,00 por sacola) ou
+  frente e verso (25% a mais, R$ 2,50), a partir de 1.000 sacolas por mês. Decisão do dono
+  em 06/11/2026, que substituiu os planos Impacto e Alcance. O preço mora na landing
+  (`lib/pricing.ts` de `qlareo-LP`); o app só guarda se são uma ou duas artes
+  (`campaigns.sides`: `um_lado` ou `frente_e_verso`).
 - Restaurante não divide sacola com concorrente: comida, bebida e app de delivery não
   anunciam, e o restaurante vê cada arte antes.
 - Piloto em **Itaboraí** e **Icaraí, Niterói** (RJ).
@@ -117,8 +119,8 @@ escritas de qualquer jeito). O fluxo de uma venda:
 1. O anunciante cria a conta em `app.qlareo.com/cadastro`. Ele vira um anunciante com o
    nome da empresa que digitou, e aparece em **Anunciantes** com o e-mail (via
    `public.operator_advertisers`, a única porta para `auth.users`, e só para operador).
-2. Em **Campanhas › Nova campanha**: anunciante, nome, plano (Impacto, ou Alcance com o
-   lado da sacola), link de destino e, se quiser, as datas. Nasce em "Aguardando arte".
+2. Em **Campanhas › Nova campanha**: anunciante, nome, arte num lado ou frente e verso,
+   link de destino e, se quiser, as datas. Nasce em "Aguardando arte".
 3. Na campanha, marque os restaurantes: cada um ganha o próprio QR.
 4. Baixe o **SVG** de cada QR e mande para a gráfica. O PNG (2048px) é para conferir.
 5. Mude o status à mão conforme a campanha anda (em produção → em circulação → encerrada).
@@ -132,8 +134,8 @@ escritas de qualquer jeito). O fluxo de uma venda:
   gráfica levaria à tela de login da Vercel. Só no `npm run dev` aponta para a máquina.
 - **Restaurantes** se cadastram em **Restaurantes**; não há exclusão (o banco recusa
   apagar restaurante com campanha).
-- Ainda não há trava contra dois anunciantes no mesmo lado da sacola, no mesmo
-  restaurante e período. Hoje isso é conferido de olho.
+- Não há conflito de lado para travar: cada sacola é de um anunciante só, e dois
+  anunciantes no mesmo restaurante recebem lotes de sacola diferentes.
 
 ## QR codes (`/r/:slug`)
 

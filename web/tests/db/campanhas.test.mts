@@ -41,7 +41,6 @@ describe("campanhas e leituras", { skip }, () => {
       .insert({
         advertiser_id: advertiserId,
         name: "Teste",
-        plan: "impacto",
         destination_url: destination,
       })
       .select("id")
@@ -150,7 +149,7 @@ describe("campanhas e leituras", { skip }, () => {
   test("anunciante não cria, muda nem apaga campanha, QR ou leitura", async () => {
     const insert = await alice.client
       .from("campaigns")
-      .insert({ advertiser_id: alice.advertiserId, name: "x", plan: "impacto", destination_url: "https://x.com" });
+      .insert({ advertiser_id: alice.advertiserId, name: "x", destination_url: "https://x.com" });
     assert.ok(insert.error, "anunciante criou campanha");
 
     const redirect = await alice.client
@@ -183,20 +182,24 @@ describe("campanhas e leituras", { skip }, () => {
     assert.equal(update.data.status, "em_circulacao");
   });
 
-  test("o banco recusa destino que não é http(s) e plano com lado errado", async () => {
+  test("o banco recusa destino que não é http(s) e lado que não existe", async () => {
     const js = await admin
       .from("campaigns")
-      .insert({ advertiser_id: alice.advertiserId, name: "x", plan: "impacto", destination_url: "javascript:alert(1)" });
+      .insert({ advertiser_id: alice.advertiserId, name: "x", destination_url: "javascript:alert(1)" });
     assert.ok(js.error, "aceitou javascript:");
 
-    const impactoComLado = await admin
+    const antigo = await admin
       .from("campaigns")
-      .insert({ advertiser_id: alice.advertiserId, name: "x", plan: "impacto", side: "frente", destination_url: "https://x.com" });
-    assert.ok(impactoComLado.error, "Impacto ocupa os dois lados");
+      .insert({ advertiser_id: alice.advertiserId, name: "x", sides: "alcance", destination_url: "https://x.com" });
+    assert.ok(antigo.error, "aceitou o plano antigo");
 
-    const alcanceSemLado = await admin
+    const semLado = await admin
       .from("campaigns")
-      .insert({ advertiser_id: alice.advertiserId, name: "x", plan: "alcance", destination_url: "https://x.com" });
-    assert.ok(alcanceSemLado.error, "Alcance precisa dizer o lado");
+      .insert({ advertiser_id: alice.advertiserId, name: "x", destination_url: "https://x.com" })
+      .select("id, sides")
+      .single();
+    assert.ifError(semLado.error);
+    assert.equal(semLado.data.sides, "um_lado", "sem escolha, a arte vai num lado");
+    await admin.from("campaigns").delete().eq("id", semLado.data.id);
   });
 });
